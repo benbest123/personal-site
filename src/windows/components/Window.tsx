@@ -1,8 +1,25 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { useWindows } from "../useWindows";
 import { useDrag } from "../useDrag";
-import { TASKBAR_HEIGHT } from "../clampToViewport";
 import type { Point, Size, WindowId } from "../types";
+
+/**
+ * Focus-return targets for closing/minimising a window, keyed by id (see `DesktopIcon.tsx`
+ * and `Taskbar.tsx`, which render elements with exactly these ids). Reconstructing "what
+ * should get focus" from a state diff after the fact was tried and dropped — see Task 9's
+ * fix round 1 report — because it cannot tell "this window closed" apart from "this window
+ * was discarded by another OPEN on mobile", where the reducer clears every other window
+ * (`singleWindow: true`). The control that causes the change knows unambiguously what it
+ * did, so it is what restores focus.
+ */
+function focusIcon(id: WindowId) {
+  document.getElementById(`icon-${id}`)?.focus();
+}
+
+function focusTaskbarButton(id: WindowId) {
+  document.getElementById(`taskbar-${id}`)?.focus();
+}
 
 interface WindowProps {
   id: WindowId;
@@ -37,17 +54,35 @@ export default function Window({
     bodyRef.current?.focus();
   }, []);
 
+  // `flushSync` forces the close/minimise state update (and, on mobile, the resulting
+  // `inert` removal from the icon column/taskbar — see Desktop.tsx) to commit before the
+  // next line runs. Without it, the remaining synchronous code below would still be
+  // looking at last render's DOM, where the target could still be `inert` and refuse a
+  // programmatic `.focus()` call.
+  const handleClose = useCallback(() => {
+    flushSync(() => close(id));
+    focusIcon(id);
+  }, [close, id]);
+
+  const handleMinimise = useCallback(() => {
+    flushSync(() => minimise(id));
+    focusTaskbarButton(id);
+  }, [minimise, id]);
+
   useEffect(() => {
     if (!focused) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close(id);
+      if (event.key === "Escape") handleClose();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [focused, close, id]);
+  }, [focused, handleClose]);
 
   const frame = isMobile
-    ? { left: 0, top: 0, width: "100%", height: `calc(100% - ${TASKBAR_HEIGHT}px)` }
+    ? // `main` (this element's positioned ancestor) already excludes the taskbar's height —
+      // see Desktop.tsx's flex column — so `100%` here already stops above it. Subtracting
+      // TASKBAR_HEIGHT again left a teal gap the height of the taskbar above the real one.
+      { left: 0, top: 0, width: "100%", height: "100%" }
     : {
         left: dragPosition.x,
         top: dragPosition.y,
@@ -78,8 +113,8 @@ export default function Window({
       >
         <div className="title-bar-text">{title}</div>
         <div className="title-bar-controls">
-          <button type="button" aria-label="Minimize" onClick={() => minimise(id)} />
-          <button type="button" aria-label="Close" onClick={() => close(id)} />
+          <button type="button" aria-label="Minimize" onClick={handleMinimise} />
+          <button type="button" aria-label="Close" onClick={handleClose} />
         </div>
       </div>
       <div ref={bodyRef} tabIndex={-1} className="window-body flex-1 overflow-y-auto">

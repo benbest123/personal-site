@@ -1,22 +1,16 @@
-import { forwardRef } from "react";
-
 interface DesktopIconProps {
+  /** DOM id, e.g. `icon-projects` — `Window.tsx` looks this up by id to return focus here
+   *  after this window closes (see the comment on its Close/Escape handlers). */
+  id: string;
   label: string;
   icon: string;
   onOpen: () => void;
 }
 
-/**
- * Forwards its ref to the underlying `<button>` so `Desktop` can return focus
- * here after a window closes (see `Desktop.tsx`'s focus-return effect).
- */
-const DesktopIcon = forwardRef<HTMLButtonElement, DesktopIconProps>(function DesktopIcon(
-  { label, icon, onOpen },
-  ref
-) {
+export default function DesktopIcon({ id, label, icon, onOpen }: DesktopIconProps) {
   return (
     <button
-      ref={ref}
+      id={id}
       type="button"
       onClick={onOpen}
       aria-label={label}
@@ -30,6 +24,4 @@ const DesktopIcon = forwardRef<HTMLButtonElement, DesktopIconProps>(function Des
       <span className="text-center text-xs leading-tight">{label}</span>
     </button>
   );
-});
-
-export default DesktopIcon;
+}

@@ -20,15 +20,16 @@ describe("Taskbar clock", () => {
     );
 
     expect(setSpy).toHaveBeenCalledTimes(1);
-    const timerId = setSpy.mock.results[0]?.value as number;
+    // Under vi.useFakeTimers() this is a Timeout-like object, not a real `number` (despite
+    // the DOM-typed signature) — no cast to `number`, just pass whatever came back through.
+    const timerId = setSpy.mock.results[0]?.value;
 
     unmount();
 
+    // This is the load-bearing assertion: it fails if the effect's cleanup stops returning
+    // `() => window.clearInterval(timer)`, which is the only thing standing between an
+    // unmounted Taskbar and a timer that keeps firing for the rest of the test run.
     expect(clearSpy).toHaveBeenCalledWith(timerId);
-
-    // If the interval were not actually cleared, this would still fire and could try to
-    // update the (now unmounted) component's state.
-    vi.advanceTimersByTime(60_000);
 
     vi.useRealTimers();
   });

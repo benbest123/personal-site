@@ -18,31 +18,35 @@ describe("Desktop", () => {
 
   it("renders one icon per registered window", () => {
     render(<App />);
+    const desktop = screen.getByRole("main");
     for (const id of DESKTOP_ORDER) {
-      expect(screen.getByRole("button", { name: REGISTRY[id].title })).toBeInTheDocument();
+      expect(within(desktop).getByRole("button", { name: REGISTRY[id].title })).toBeInTheDocument();
     }
   });
 
   it("opens a window when its icon is clicked", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Projects" }));
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
     expect(screen.getByRole("dialog", { name: "Projects" })).toBeInTheDocument();
   });
 
   it("adds a taskbar button per open window", async () => {
     const user = userEvent.setup();
     render(<App />);
+    const desktop = screen.getByRole("main");
     const taskbar = screen.getByRole("toolbar", { name: "Open windows" });
     expect(within(taskbar).queryAllByRole("button")).toHaveLength(0);
-    await user.click(screen.getByRole("button", { name: "Projects" }));
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
     expect(within(taskbar).getAllByRole("button")).toHaveLength(1);
   });
 
   it("minimises and restores from the taskbar", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Projects" }));
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
     const taskbar = screen.getByRole("toolbar", { name: "Open windows" });
     const taskbarButton = within(taskbar).getByRole("button", { name: /projects/i });
 
@@ -56,21 +60,90 @@ describe("Desktop", () => {
   it("returns focus to the desktop icon after closing a window", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Projects" }));
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
     const dialog = screen.getByRole("dialog", { name: "Projects" });
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Projects" })).toHaveFocus();
+    // Scoped to `main` (the desktop), not `screen` directly: a taskbar button and a
+    // desktop icon can share an accessible name, and this query would otherwise only be
+    // unambiguous by the coincidence that closing (unlike minimising) removes the taskbar
+    // button too.
+    expect(within(desktop).getByRole("button", { name: "Projects" })).toHaveFocus();
   });
 
   it("returns focus to the taskbar button after minimising a window from its title bar", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Projects" }));
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
     const dialog = screen.getByRole("dialog", { name: "Projects" });
     await user.click(within(dialog).getByRole("button", { name: "Minimize" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     const taskbar = screen.getByRole("toolbar", { name: "Open windows" });
     expect(within(taskbar).getByRole("button", { name: /projects/i })).toHaveFocus();
+  });
+
+  it("keeps focus inside the newly opened window when opening it discards another window on mobile", async () => {
+    window.innerWidth = 500;
+    window.innerHeight = 700;
+    const user = userEvent.setup();
+    render(<App />);
+    const desktop = screen.getByRole("main");
+
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
+    await user.click(within(desktop).getByRole("button", { name: "Contact" }));
+
+    // Only the new window should exist — `singleWindow: true` on mobile discards Projects
+    // outright, which is exactly the case that broke focus restoration before this fix
+    // round: reconstructing "what changed" from a state diff could not tell "the window
+    // closed" apart from "another OPEN discarded it", and sent focus to Projects' icon
+    // instead of leaving it in Contact.
+    expect(screen.queryAllByRole("dialog")).toHaveLength(1);
+    const dialog = screen.getByRole("dialog", { name: "Contact" });
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it("marks only the focused window's taskbar button as pressed", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
+    await user.click(within(desktop).getByRole("button", { name: "Contact" }));
+
+    const taskbar = screen.getByRole("toolbar", { name: "Open windows" });
+    const projectsButton = within(taskbar).getByRole("button", { name: /projects/i });
+    const contactButton = within(taskbar).getByRole("button", { name: /contact/i });
+
+    expect(contactButton).toHaveAttribute("aria-pressed", "true");
+    expect(projectsButton).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("keeps the name and summary block non-interactive so it does not swallow clicks meant for windows beneath it", () => {
+    render(<App />);
+    // pointer-events-none is what lets a click landing on this block's footprint (bottom
+    // right of the desktop) pass through to a window rendered underneath instead of
+    // hitting this decorative text.
+    expect(screen.getByTestId("desktop-summary")).toHaveClass("pointer-events-none");
+  });
+
+  it("leaves the icon column and summary block interactive on desktop even with a window open", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
+    expect(screen.getByTestId("desktop-icons")).not.toHaveAttribute("inert");
+    expect(screen.getByTestId("desktop-summary")).not.toHaveAttribute("inert");
+  });
+
+  it("makes the icon column and summary block inert while a window covers them on mobile", async () => {
+    window.innerWidth = 500;
+    window.innerHeight = 700;
+    const user = userEvent.setup();
+    render(<App />);
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
+    expect(screen.getByTestId("desktop-icons")).toHaveAttribute("inert");
+    expect(screen.getByTestId("desktop-summary")).toHaveAttribute("inert");
   });
 });

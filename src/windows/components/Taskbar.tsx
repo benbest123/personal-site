@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { REGISTRY } from "../registry";
 import { useWindows } from "../useWindows";
 import { TASKBAR_HEIGHT } from "../clampToViewport";
-import type { WindowId } from "../types";
 
 function useClock(): string {
   const [now, setNow] = useState(() => new Date());
@@ -18,15 +17,7 @@ function useClock(): string {
   return now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-interface TaskbarProps {
-  /**
-   * Lets `Desktop` capture a ref to each taskbar button as it mounts, so focus can be
-   * returned there after a window is minimised from its title bar (see `Desktop.tsx`).
-   */
-  onButtonRef?: (id: WindowId, el: HTMLButtonElement | null) => void;
-}
-
-export default function Taskbar({ onButtonRef }: TaskbarProps) {
+export default function Taskbar() {
   const { windows, focused, toggleFromTaskbar } = useWindows();
   const time = useClock();
 
@@ -39,7 +30,9 @@ export default function Taskbar({ onButtonRef }: TaskbarProps) {
         {windows.map(instance => (
           <button
             key={instance.id}
-            ref={el => onButtonRef?.(instance.id, el)}
+            // `Window.tsx`'s Minimize handler focuses this id directly after minimising,
+            // rather than Desktop reconstructing intent from a state diff — see Window.tsx.
+            id={`taskbar-${instance.id}`}
             type="button"
             onClick={() => toggleFromTaskbar(instance.id)}
             aria-pressed={focused === instance.id}
