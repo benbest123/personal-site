@@ -54,18 +54,23 @@ export default function Window({
     bodyRef.current?.focus();
   }, []);
 
-  // `flushSync` forces the close/minimise state update (and, on mobile, the resulting
-  // `inert` removal from the icon column/taskbar — see Desktop.tsx) to commit before the
-  // next line runs. Without it, the remaining synchronous code below would still be
-  // looking at last render's DOM, where the target could still be `inert` and refuse a
-  // programmatic `.focus()` call.
+  // `flushSync` forces the close state update — and, on mobile, the resulting `inert`
+  // removal from the icon column (see Desktop.tsx) — to commit before the next line runs.
+  // Without it, the remaining synchronous code below would still be looking at last
+  // render's DOM, where the icon could still be `inert` and refuse a programmatic
+  // `.focus()` call.
   const handleClose = useCallback(() => {
     flushSync(() => close(id));
     focusIcon(id);
   }, [close, id]);
 
+  // No `flushSync` needed here, unlike `handleClose` above: `<Taskbar />` is a sibling of
+  // `<main>` (see Desktop.tsx), so its buttons are never made `inert`, and a window's
+  // taskbar button stays mounted for as long as the window itself exists (minimising
+  // never removes it), so there is no stale-DOM race for a synchronous `.focus()` call to
+  // lose.
   const handleMinimise = useCallback(() => {
-    flushSync(() => minimise(id));
+    minimise(id);
     focusTaskbarButton(id);
   }, [minimise, id]);
 

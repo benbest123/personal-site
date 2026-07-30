@@ -2928,9 +2928,10 @@ export default function Desktop() {
 - [x] **Step 5a (round-1 addition): move focus restoration into `Window.tsx`**
 
 `Window.tsx` is Task 8 code, but this is the step that changed it, so it belongs here. The
-Close and Minimize handlers, and the Escape handler, now call `close`/`minimise` via
-`flushSync` and then look up their own focus-return target by id (`icon-${id}` or
-`taskbar-${id}`) rather than `Desktop` inferring it after the fact:
+Close and Minimize handlers, and the Escape handler, now call `close`/`minimise` and then
+look up their own focus-return target by id (`icon-${id}` or `taskbar-${id}`) rather than
+`Desktop` inferring it after the fact; Close additionally wraps its call in `flushSync` (see
+below):
 
 ```tsx
 /**
@@ -2952,18 +2953,22 @@ function focusTaskbarButton(id: WindowId) {
 
 // ...inside Window():
 
-// `flushSync` forces the close/minimise state update (and, on mobile, the resulting
-// `inert` removal from the icon column/taskbar — see Desktop.tsx) to commit before the
-// next line runs. Without it, the remaining synchronous code below would still be
-// looking at last render's DOM, where the target could still be `inert` and refuse a
-// programmatic `.focus()` call.
+// `flushSync` forces the close state update (and, on mobile, the resulting `inert`
+// removal from the icon column — see Desktop.tsx) to commit before the next line runs.
+// Without it, the remaining synchronous code below would still be looking at last
+// render's DOM, where the icon could still be `inert` and refuse a programmatic
+// `.focus()` call.
 const handleClose = useCallback(() => {
   flushSync(() => close(id));
   focusIcon(id);
 }, [close, id]);
 
+// No `flushSync` needed here, unlike `handleClose` above: `<Taskbar />` is a sibling of
+// `<main>` (see Desktop.tsx), so its buttons are never made `inert`, and a taskbar button
+// stays mounted for as long as its window exists, so there is no stale-DOM race for the
+// synchronous `.focus()` call below to lose.
 const handleMinimise = useCallback(() => {
-  flushSync(() => minimise(id));
+  minimise(id);
   focusTaskbarButton(id);
 }, [minimise, id]);
 
@@ -2977,14 +2982,16 @@ useEffect(() => {
 }, [focused, handleClose]);
 ```
 
-`flushSync` is the one addition beyond what review specified: without it, `inert` (added in
-the same round, to the icon column/taskbar button's containers) could still be true on the
-target at the exact moment `.focus()` runs, since the state update it depends on has not yet
+`flushSync` on close is the one addition beyond what review specified: without it, `inert`
+(added in the same round, to the icon column's container) could still be true on the icon
+at the exact moment `.focus()` runs, since the state update it depends on has not yet
 committed — the DOM a synchronous handler sees between two of its own statements is still
 last render's. `flushSync` forces the commit first. React 19 flushing discrete event updates
 synchronously is true of *existence* (the icon and taskbar button are always mounted, never
 conditionally, so neither needed the flush to be found at all) but not of *attribute
-freshness*, which is what `inert` depends on and what `flushSync` actually buys here.
+freshness*, which is what `inert` depends on. Minimise never gains an `inert` target in the
+first place — `<Taskbar />` is a sibling of `<main>`, outside the subtree `inert` is ever
+applied to — so `handleMinimise` does not call `flushSync` at all.
 
 I4 was also fixed on `Window.tsx` in this pass: the mobile frame's height was
 `calc(100% - ${TASKBAR_HEIGHT}px)`, double-subtracting the taskbar's height because the
