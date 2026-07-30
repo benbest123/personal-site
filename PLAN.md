@@ -1646,23 +1646,31 @@ is still empty.
 
 **Interfaces:**
 - Consumes: everything Task 6 produced.
-- Produces:
-  - `MOBILE_BREAKPOINT = 768` and `useViewport(): { viewport: Viewport; isMobile: boolean }`
+- Produces (as shipped, after the round-1 hardening pass described at the end of this
+  section — `useViewport` returns a ref, not a plain value):
+  - `MOBILE_BREAKPOINT = 768` and `useViewport(): { viewportRef: RefObject<Viewport>; isMobile: boolean }`
   - `WindowsProvider: ({ children }: { children: ReactNode }) => JSX.Element`
-  - `useWindows(): WindowsContextValue` with fields `windows`, `focused`, `isMobile`, and methods `open`, `close`, `focus`, `minimise`, `toggleFromTaskbar`, `move`
+  - `useWindows(): WindowsContextValue` with fields `windows` (`readonly WindowInstance[]`, matching
+    `DesktopState.windows`), `focused`, `isMobile`, and methods `open`, `close`, `focus`, `minimise`,
+    `toggleFromTaskbar`, `move`
 - The context value and its methods are what Tasks 8 and 9 consume. Names are fixed here.
 
 `context.ts` holds the `createContext` call on its own so that `WindowsProvider.tsx` exports only a component, which keeps the `react-refresh/only-export-components` ESLint rule quiet.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
-`src/windows/WindowsProvider.test.tsx`:
+`src/windows/WindowsProvider.test.tsx` — the version below is what actually shipped, after
+the round-1 hardening pass (see the note at the end of this section) added five behavioural
+tests, a resize-identity test and a `useWindows`-outside-provider test, and strengthened the
+`open()` size assertion. The first draft matched the brief's snippet verbatim (four tests, a
+`toBeGreaterThan(0)` size check); all of that was found insufficient by review:
 
 ```tsx
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { WindowsProvider } from "./WindowsProvider";
 import { useWindows } from "./useWindows";
+import { REGISTRY } from "./registry";
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <WindowsProvider>{children}</WindowsProvider>
@@ -1688,7 +1696,7 @@ describe("WindowsProvider", () => {
     act(() => result.current.open("cv"));
     expect(result.current.windows).toHaveLength(1);
     expect(result.current.focused).toBe("cv");
-    expect(result.current.windows[0].size.width).toBeGreaterThan(0);
+    expect(result.current.windows[0].size).toEqual(REGISTRY.cv.defaultSize);
   });
 
   it("keeps two windows open on a desktop viewport", () => {
@@ -1707,6 +1715,72 @@ describe("WindowsProvider", () => {
     act(() => result.current.open("projects"));
     expect(result.current.windows.map(w => w.id)).toEqual(["projects"]);
   });
+
+  it("does not change context identity on a resize that stays on the same side of the breakpoint", () => {
+    const { result } = renderHook(() => useWindows(), { wrapper });
+    const before = result.current;
+    act(() => setViewportWidth(1201));
+    expect(result.current).toBe(before);
+  });
+
+  it("closes a window, leaving the others open", () => {
+    const { result } = renderHook(() => useWindows(), { wrapper });
+    act(() => result.current.open("cv"));
+    act(() => result.current.open("projects"));
+    act(() => result.current.close("cv"));
+    expect(result.current.windows.map(w => w.id)).toEqual(["projects"]);
+    expect(result.current.focused).toBe("projects");
+  });
+
+  it("focus brings a background window to the top and makes it the focused one", () => {
+    const { result } = renderHook(() => useWindows(), { wrapper });
+    act(() => result.current.open("cv"));
+    act(() => result.current.open("projects"));
+    act(() => result.current.focus("cv"));
+    expect(result.current.windows.map(w => w.id)).toEqual(["projects", "cv"]);
+    expect(result.current.focused).toBe("cv");
+  });
+
+  it("minimising the focused window hands focus to the window beneath it", () => {
+    const { result } = renderHook(() => useWindows(), { wrapper });
+    act(() => result.current.open("cv"));
+    act(() => result.current.open("projects"));
+    act(() => result.current.minimise("projects"));
+    const minimised = result.current.windows.find(w => w.id === "projects");
+    expect(minimised?.minimised).toBe(true);
+    expect(result.current.focused).toBe("cv");
+  });
+
+  it("toggleFromTaskbar minimises the focused window, then restores and refocuses it", () => {
+    const { result } = renderHook(() => useWindows(), { wrapper });
+    act(() => result.current.open("cv"));
+    act(() => result.current.toggleFromTaskbar("cv"));
+    expect(result.current.windows[0].minimised).toBe(true);
+    expect(result.current.focused).toBeNull();
+    act(() => result.current.toggleFromTaskbar("cv"));
+    expect(result.current.windows[0].minimised).toBe(false);
+    expect(result.current.focused).toBe("cv");
+  });
+
+  it("move clamps the requested position to stay inside the viewport", () => {
+    const { result } = renderHook(() => useWindows(), { wrapper });
+    act(() => result.current.open("cv"));
+    const { width, height } = REGISTRY.cv.defaultSize;
+    act(() => result.current.move("cv", { x: 100_000, y: 100_000 }));
+    const moved = result.current.windows[0];
+    expect(moved.position.x).toBeLessThanOrEqual(1200 - width);
+    expect(moved.position.y).toBeLessThanOrEqual(900 - height);
+    expect(moved.position.x).toBeGreaterThanOrEqual(0);
+    expect(moved.position.y).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("useWindows", () => {
+  it("throws when rendered outside a WindowsProvider", () => {
+    expect(() => renderHook(() => useWindows())).toThrow(
+      "useWindows must be used inside a WindowsProvider"
+    );
+  });
 });
 ```
 
@@ -1715,12 +1789,17 @@ describe("WindowsProvider", () => {
 Run: `npm test src/windows/WindowsProvider.test.tsx`
 Expected: FAIL — cannot resolve `./WindowsProvider`.
 
-- [ ] **Step 3: Implement `useViewport.ts`**
+- [x] **Step 3: Implement `useViewport.ts`**
 
-The only place in the codebase that reads `window.innerWidth` or knows the breakpoint.
+The only place in the codebase that reads `window.innerWidth` or knows the breakpoint. The
+version below is what actually shipped, after the round-1 hardening pass at the end of this
+section replaced the brief's plain-state version: the viewport is now exposed via a `useRef`
+that `WindowsProvider` reads at dispatch time, and `isMobile` state only updates when the
+boolean actually flips, so a resize that doesn't cross the breakpoint causes no re-render at
+all.
 
 ```ts
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { Viewport } from "./types";
 
 export const MOBILE_BREAKPOINT = 768;
@@ -1729,27 +1808,60 @@ function read(): Viewport {
   return { width: window.innerWidth, height: window.innerHeight };
 }
 
-export function useViewport(): { viewport: Viewport; isMobile: boolean } {
-  const [viewport, setViewport] = useState<Viewport>(read);
+function isBelowBreakpoint(viewport: Viewport): boolean {
+  return viewport.width < MOBILE_BREAKPOINT;
+}
+
+/**
+ * The viewport is exposed as a ref, not state. It changes on every resize
+ * event, and `WindowsProvider`'s `open`/`move` callbacks only need its
+ * current value at the moment they dispatch, not a fresh render every time
+ * it changes. Putting it in state (as an object — always a new reference)
+ * would churn those callbacks' identity on every resize, which cascades
+ * through the memoised context value and re-renders the whole desktop even
+ * when nothing observable changed. That would defeat the same-reference
+ * no-op optimisation `windowReducer` was hardened to provide (see Task 6).
+ *
+ * `isMobile` is the only piece of viewport information that genuinely needs
+ * to trigger a re-render, and the state setter below only fires it when the
+ * boolean actually flips — a resize that stays on the same side of the
+ * breakpoint must not cause a re-render either.
+ */
+export function useViewport(): { viewportRef: RefObject<Viewport>; isMobile: boolean } {
+  const viewportRef = useRef<Viewport>(read());
+  // Read directly rather than via `viewportRef.current`: refs must not be read during
+  // render (react-hooks/refs), and this initial snapshot is taken at the same moment
+  // the ref above was seeded, so the two agree.
+  const [isMobile, setIsMobile] = useState(() => isBelowBreakpoint(read()));
 
   useEffect(() => {
-    const onResize = () => setViewport(read());
+    const onResize = () => {
+      const next = read();
+      viewportRef.current = next;
+      const mobile = isBelowBreakpoint(next);
+      setIsMobile(prev => (prev === mobile ? prev : mobile));
+    };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  return { viewport, isMobile: viewport.width < MOBILE_BREAKPOINT };
+  return { viewportRef, isMobile };
 }
 ```
 
-- [ ] **Step 4: Implement `context.ts`**
+- [x] **Step 4: Implement `context.ts`**
+
+The shipped `windows` field is `readonly WindowInstance[]`, not the brief's
+`WindowInstance[]` — `DesktopState.windows` is `readonly` (Task 6 hardening), and
+`WindowsProvider` passes `state.windows` straight through with no copy, so the context
+field must match rather than silently widen the guarantee.
 
 ```ts
 import { createContext } from "react";
 import type { Point, WindowId, WindowInstance } from "./types";
 
 export interface WindowsContextValue {
-  windows: WindowInstance[];
+  windows: readonly WindowInstance[];
   focused: WindowId | null;
   isMobile: boolean;
   open: (id: WindowId) => void;
@@ -1763,7 +1875,13 @@ export interface WindowsContextValue {
 export const WindowsContext = createContext<WindowsContextValue | null>(null);
 ```
 
-- [ ] **Step 5: Implement `WindowsProvider.tsx`**
+- [x] **Step 5: Implement `WindowsProvider.tsx`**
+
+The shipped version reads `viewportRef.current` at dispatch time instead of closing over a
+`viewport` value, so `open`'s dependency array is `[isMobile, viewportRef]` and `move`'s is
+`[viewportRef]` — neither churns on a resize, only `open` on an `isMobile` flip. (`viewportRef`
+is included for lint completeness; a ref's identity from `useRef` never changes, so this has
+no effect on how often the callbacks are recreated.)
 
 ```tsx
 import { useCallback, useMemo, useReducer, type ReactNode } from "react";
@@ -1775,7 +1893,7 @@ import type { Point, WindowId } from "./types";
 
 export function WindowsProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(windowReducer, initialState);
-  const { viewport, isMobile } = useViewport();
+  const { viewportRef, isMobile } = useViewport();
 
   const open = useCallback(
     (id: WindowId) =>
@@ -1783,15 +1901,16 @@ export function WindowsProvider({ children }: { children: ReactNode }) {
         type: "OPEN",
         id,
         size: REGISTRY[id].defaultSize,
-        viewport,
+        viewport: viewportRef.current,
         singleWindow: isMobile,
       }),
-    [viewport, isMobile]
+    [isMobile, viewportRef]
   );
 
   const move = useCallback(
-    (id: WindowId, position: Point) => dispatch({ type: "MOVE", id, position, viewport }),
-    [viewport]
+    (id: WindowId, position: Point) =>
+      dispatch({ type: "MOVE", id, position, viewport: viewportRef.current }),
+    [viewportRef]
   );
 
   const close = useCallback((id: WindowId) => dispatch({ type: "CLOSE", id }), []);
@@ -1821,7 +1940,7 @@ export function WindowsProvider({ children }: { children: ReactNode }) {
 }
 ```
 
-- [ ] **Step 6: Implement `useWindows.ts`**
+- [x] **Step 6: Implement `useWindows.ts`**
 
 ```ts
 import { useContext } from "react";
@@ -1836,7 +1955,7 @@ export function useWindows(): WindowsContextValue {
 }
 ```
 
-- [ ] **Step 7: Create a provisional `registry.ts` so the provider compiles**
+- [x] **Step 7: Create a provisional `registry.ts` so the provider compiles**
 
 The full registry with components lands in Task 8. Sizes are what the provider needs now.
 
@@ -1855,18 +1974,63 @@ export const REGISTRY: Record<WindowId, WindowSizes> = {
 };
 ```
 
-- [ ] **Step 8: Run the tests**
+- [x] **Step 8: Run the tests**
 
 Run: `npm test src/windows`
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git checkout -b feat/windows-provider
 git add src/windows
 git commit -m "feat: add viewport hook and windows provider"
 ```
+
+- [x] **Fix round 1 (post-review hardening)**
+
+Code review found no live logic bugs in the reducer usage itself, but found one
+substantive defect and three test-coverage gaps, all traced to the brief rather than to
+implementation error. Fixed on the same branch, in a second commit:
+
+- **A resize defeated the memoisation Task 6 was hardened to provide.** The brief's
+  `useViewport` stored `viewport` in `useState` as a plain object; `read()` returns a
+  fresh object on every resize, so `open`/`move`'s `useCallback` deps (which included
+  `viewport`) churned identity on every resize event, cascading through the `useMemo`'d
+  context value and re-rendering every consumer — even for a resize that stayed on the
+  same side of the mobile breakpoint. Proved with a test that resizes 1200→1201px (no
+  breakpoint crossing) and asserts the context value's identity is unchanged; the test
+  failed against the original implementation (`AssertionError: expected {...} to be
+  {...} // Object.is equality`) and passes after the fix. Fixed by moving the viewport
+  into a `useRef` that `open`/`move` read at dispatch time (deps become `[isMobile,
+  viewportRef]` and `[viewportRef]`), and by only calling `setIsMobile` when the
+  boolean actually flips, so a same-side resize causes no re-render at all — React's
+  own same-value-bailout means the whole provider tree skips rendering. (An earlier
+  draft of the fix computed the initial `isMobile` state via
+  `viewportRef.current` inside `useState`'s lazy initialiser; ESLint's
+  `react-hooks/refs` rule correctly flagged this as reading a ref during render, so the
+  initial read uses a direct `read()` call instead.)
+- **Provider-level tests never exercised `move`, `close`, `focus`, `minimise` or
+  `toggleFromTaskbar`.** Reviewer proof: temporarily replacing `focused: focusedId(state)`
+  with a naive "last array element, ignoring minimised" implementation left the entire
+  suite green. Added five behavioural tests (minimise-falls-through-to-the-window-beneath,
+  explicit focus reordering the stack, toggleFromTaskbar minimising then restoring,
+  close leaving siblings open, move clamping an out-of-bounds drag) and confirmed each is
+  load-bearing: the injected `focusedId` bug failed the minimise and toggleFromTaskbar
+  tests; a no-op `close`/`focus` failed their respective tests; an unclamped `move` failed
+  its test. All four mutations were reverted after confirming green.
+- **The `open()` size assertion (`toBeGreaterThan(0)`) could not tell "used the registry"
+  from "used any positive number."** Reviewer proof: hardcoding `{width: 100, height: 100}`
+  in `open` still passed. Replaced with `toEqual(REGISTRY.cv.defaultSize)`; confirmed the
+  same hardcoded-size mutation now fails it.
+- **`useWindows`'s throw outside a provider was untested.** Added a test rendering the hook
+  with no wrapper and asserting it throws the expected message; confirmed a mutation that
+  swallows the missing-context case instead of throwing fails the new test.
+
+Test count grew from 41 to 48 in `src/windows` (66 across the whole suite).
+`npm run lint && npm run typecheck && npm test && npm run build` all pass, and the
+breakpoint-isolation grep (`grep -rnE "innerWidth|innerHeight|768" src/`) still only matches
+`useViewport.ts` and its test.
 
 ---
 
