@@ -7,7 +7,7 @@ import type { Point, WindowId } from "./types";
 
 export function WindowsProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(windowReducer, initialState);
-  const { viewport, isMobile } = useViewport();
+  const { viewportRef, isMobile } = useViewport();
 
   const open = useCallback(
     (id: WindowId) =>
@@ -15,15 +15,16 @@ export function WindowsProvider({ children }: { children: ReactNode }) {
         type: "OPEN",
         id,
         size: REGISTRY[id].defaultSize,
-        viewport,
+        viewport: viewportRef.current,
         singleWindow: isMobile,
       }),
-    [viewport, isMobile]
+    [isMobile, viewportRef]
   );
 
   const move = useCallback(
-    (id: WindowId, position: Point) => dispatch({ type: "MOVE", id, position, viewport }),
-    [viewport]
+    (id: WindowId, position: Point) =>
+      dispatch({ type: "MOVE", id, position, viewport: viewportRef.current }),
+    [viewportRef]
   );
 
   const close = useCallback((id: WindowId) => dispatch({ type: "CLOSE", id }), []);
