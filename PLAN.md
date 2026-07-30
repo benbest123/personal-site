@@ -491,12 +491,9 @@ export const profile: Profile = {
 import type { Project } from "./types";
 
 export const projects: Project[] = [
-  // `cv.yml` says this is deployed on Vercel but does not record the URL. It ships as
-  // "local" because a project must never claim a deployment that is not linked
-  // (docs/DESIGN.md §5, enforced by the test in Step 1). Step 6 upgrades it.
   {
     name: "Snip — URL Shortener",
-    status: "local",
+    status: "live",
     stack: ["TypeScript", "Next.js", "PostgreSQL", "Zod", "Vercel"],
     blurb:
       "A full-stack URL shortener with JWT auth over httpOnly cookies, raw SQL against " +
@@ -505,6 +502,7 @@ export const projects: Project[] = [
       "To build something end to end with no framework hand-holding — owning the schema, " +
       "the auth, and the deploy pipeline rather than inheriting them.",
     repoUrl: "https://github.com/benbest123/url-shortener",
+    liveUrl: "https://snip-iota.vercel.app",
   },
   {
     name: "thelook-analytics",
@@ -559,18 +557,12 @@ export const projects: Project[] = [
 ];
 ```
 
-- [ ] **Step 6: Ask Ben for the URL Shortener's deployed URL**
-
-If he confirms it is live, change that entry to `status: "live"` and add
-`liveUrl: "<the url>"`. If it is no longer deployed, leave it as written. Either way the
-committed file states something true.
-
-- [ ] **Step 7: Run the tests**
+- [ ] **Step 6: Run the tests**
 
 Run: `npm test src/content/content.test.ts`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git checkout -b feat/content-model
