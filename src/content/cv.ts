@@ -13,7 +13,7 @@ export const cv: CvData = {
         "Built the Qlik-embedding layer (iframe orchestration and cross-frame communication) of a React and Node.js analytics microsite, migrating around 25 dashboards onto a compliant Content Security Policy.",
         "Independently maintained the Qlik dashboards and Qlik infrastructure through a five-week absence of the team's senior engineer that coincided with a company-wide on-premise-to-cloud migration, resolving configuration and infrastructure issues alongside the operations team.",
         "Developed a reliable load-completion detection mechanism for third-party dashboards that exposed no official data-ready API, and debugged a data race condition in the async provisioning flow, iterating from polling to a timestamp-based heuristic.",
-        "Delivered SQL Server stored procedures and end-to-end Google Analytics instrumentation across a multi-tenant .NET monolith.",
+        "Delivered SQL Server stored procedures and end-to-end Google Analytics instrumentation (per-partner enablement, server-side initialisation, security-header updates, and form event capture) across a multi-tenant .NET monolith.",
       ],
     },
     {
@@ -64,6 +64,7 @@ export const cv: CvData = {
         "Express.js",
         "PostgreSQL",
         "SQL Server (T-SQL)",
+        "Stored Procedures",
         "PySpark",
         "REST APIs",
         "ETL",
