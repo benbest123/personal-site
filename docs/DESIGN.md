@@ -374,7 +374,9 @@ explained away.
 `.github/workflows/ci.yml`, adapted from the `url-shortener` repo. On pull request to
 `main`:
 
-- one job running `eslint` and `tsc --noEmit`
+- one job running `eslint`, `tsc --noEmit` and `vite build` (Task 10 added the build step,
+  after an earlier task's dependency broke the production build and it was only caught
+  locally)
 - one job running `vitest --coverage`
 
 Both on Node 26, matching the existing workflow. Codecov is omitted for now: it needs a
