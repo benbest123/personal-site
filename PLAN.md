@@ -2584,16 +2584,22 @@ The first task where the site looks like a desktop.
 
 **Files:**
 - Create: `src/windows/components/DesktopIcon.tsx`, `src/windows/components/Desktop.tsx`, `src/windows/components/Taskbar.tsx`
-- Modify: `src/App.tsx`, `src/App.test.tsx`
-- Test: `src/windows/components/Desktop.test.tsx`
+- Modify: `src/App.tsx`, `src/windows/components/Window.tsx` (round-1 hardening only — see below)
+- Test: `src/windows/components/Desktop.test.tsx`, `src/windows/components/Taskbar.test.tsx`
 
 **Interfaces:**
 - Consumes: `useWindows()`, `REGISTRY`, `DESKTOP_ORDER`, `WindowLayer`, `profile`.
 - Produces: the finished `App`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
-`src/windows/components/Desktop.test.tsx`:
+`src/windows/components/Desktop.test.tsx` — the version below is what actually shipped,
+after the round-1 hardening pass (see the note at the end of this section) added tests for
+the mobile focus-restoration bug, `aria-pressed`, `pointer-events-none`, and `inert`, and
+scoped every icon lookup with `within(desktop)` (`desktop = screen.getByRole("main")`)
+rather than the brief's bare `screen.getByRole("button", { name: ... })` — a taskbar button
+and a desktop icon can share an accessible name, so an unscoped query is only unambiguous by
+coincidence of which test action happens to have removed the taskbar button first:
 
 ```tsx
 import { render, screen, within } from "@testing-library/react";
@@ -2616,31 +2622,35 @@ describe("Desktop", () => {
 
   it("renders one icon per registered window", () => {
     render(<App />);
+    const desktop = screen.getByRole("main");
     for (const id of DESKTOP_ORDER) {
-      expect(screen.getByRole("button", { name: REGISTRY[id].title })).toBeInTheDocument();
+      expect(within(desktop).getByRole("button", { name: REGISTRY[id].title })).toBeInTheDocument();
     }
   });
 
   it("opens a window when its icon is clicked", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Projects" }));
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
     expect(screen.getByRole("dialog", { name: "Projects" })).toBeInTheDocument();
   });
 
   it("adds a taskbar button per open window", async () => {
     const user = userEvent.setup();
     render(<App />);
+    const desktop = screen.getByRole("main");
     const taskbar = screen.getByRole("toolbar", { name: "Open windows" });
     expect(within(taskbar).queryAllByRole("button")).toHaveLength(0);
-    await user.click(screen.getByRole("button", { name: "Projects" }));
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
     expect(within(taskbar).getAllByRole("button")).toHaveLength(1);
   });
 
   it("minimises and restores from the taskbar", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Projects" }));
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
     const taskbar = screen.getByRole("toolbar", { name: "Open windows" });
     const taskbarButton = within(taskbar).getByRole("button", { name: /projects/i });
 
@@ -2650,26 +2660,116 @@ describe("Desktop", () => {
     await user.click(taskbarButton);
     expect(screen.getByRole("dialog", { name: "Projects" })).toBeInTheDocument();
   });
+
+  it("returns focus to the desktop icon after closing a window", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
+    const dialog = screen.getByRole("dialog", { name: "Projects" });
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(within(desktop).getByRole("button", { name: "Projects" })).toHaveFocus();
+  });
+
+  it("returns focus to the taskbar button after minimising a window from its title bar", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
+    const dialog = screen.getByRole("dialog", { name: "Projects" });
+    await user.click(within(dialog).getByRole("button", { name: "Minimize" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const taskbar = screen.getByRole("toolbar", { name: "Open windows" });
+    expect(within(taskbar).getByRole("button", { name: /projects/i })).toHaveFocus();
+  });
+
+  it("keeps focus inside the newly opened window when opening it discards another window on mobile", async () => {
+    window.innerWidth = 500;
+    window.innerHeight = 700;
+    const user = userEvent.setup();
+    render(<App />);
+    const desktop = screen.getByRole("main");
+
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
+    await user.click(within(desktop).getByRole("button", { name: "Contact" }));
+
+    expect(screen.queryAllByRole("dialog")).toHaveLength(1);
+    const dialog = screen.getByRole("dialog", { name: "Contact" });
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it("marks only the focused window's taskbar button as pressed", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
+    await user.click(within(desktop).getByRole("button", { name: "Contact" }));
+
+    const taskbar = screen.getByRole("toolbar", { name: "Open windows" });
+    const projectsButton = within(taskbar).getByRole("button", { name: /projects/i });
+    const contactButton = within(taskbar).getByRole("button", { name: /contact/i });
+
+    expect(contactButton).toHaveAttribute("aria-pressed", "true");
+    expect(projectsButton).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("keeps the name and summary block non-interactive so it does not swallow clicks meant for windows beneath it", () => {
+    render(<App />);
+    expect(screen.getByTestId("desktop-summary")).toHaveClass("pointer-events-none");
+  });
+
+  it("leaves the icon column and summary block interactive on desktop even with a window open", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
+    expect(screen.getByTestId("desktop-icons")).not.toHaveAttribute("inert");
+    expect(screen.getByTestId("desktop-summary")).not.toHaveAttribute("inert");
+  });
+
+  it("makes the icon column and summary block inert while a window covers them on mobile", async () => {
+    window.innerWidth = 500;
+    window.innerHeight = 700;
+    const user = userEvent.setup();
+    render(<App />);
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "Projects" }));
+    expect(screen.getByTestId("desktop-icons")).toHaveAttribute("inert");
+    expect(screen.getByTestId("desktop-summary")).toHaveAttribute("inert");
+  });
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `npm test src/windows/components/Desktop.test.tsx`
-Expected: FAIL — no `toolbar` role and no icon buttons.
+Expected: FAIL — no `toolbar` role and no icon buttons. (The tests above are the final,
+post-review set; the first draft matched the brief's five tests verbatim and failed the
+same way.)
 
-- [ ] **Step 3: Implement `DesktopIcon.tsx`**
+- [x] **Step 3: Implement `DesktopIcon.tsx`**
+
+The first draft used `forwardRef` so `Desktop` could focus an icon after a state-diffing
+effect decided it should. Round-1 review found that diffing approach unsound (see the note
+at the end of this section) and replaced it with a plain `id` prop that `Window.tsx` looks
+up directly — `forwardRef` is gone, which also resolves I3 (React 19 treats `ref` as a
+normal prop; `forwardRef` is deprecated):
 
 ```tsx
 interface DesktopIconProps {
+  /** DOM id, e.g. `icon-projects` — `Window.tsx` looks this up by id to return focus here
+   *  after this window closes (see the comment on its Close/Escape handlers). */
+  id: string;
   label: string;
   icon: string;
   onOpen: () => void;
 }
 
-export default function DesktopIcon({ label, icon, onOpen }: DesktopIconProps) {
+export default function DesktopIcon({ id, label, icon, onOpen }: DesktopIconProps) {
   return (
     <button
+      id={id}
       type="button"
       onClick={onOpen}
       aria-label={label}
@@ -2686,7 +2786,12 @@ export default function DesktopIcon({ label, icon, onOpen }: DesktopIconProps) {
 }
 ```
 
-- [ ] **Step 4: Implement `Taskbar.tsx`**
+- [x] **Step 4: Implement `Taskbar.tsx`**
+
+The clock is unchanged from the brief. The `onButtonRef` prop from the first draft (paired
+with `DesktopIcon`'s `forwardRef`) is gone for the same reason: each taskbar button now
+carries its own `id={`taskbar-${instance.id}`}`, which `Window.tsx`'s Minimize handler looks
+up directly instead of `Desktop` reconstructing intent from a ref map and a state diff:
 
 ```tsx
 import { useEffect, useState } from "react";
@@ -2697,6 +2802,11 @@ import { TASKBAR_HEIGHT } from "../clampToViewport";
 function useClock(): string {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
+    // A 30s tick is coarse enough not to matter for a HH:MM clock but frequent enough to
+    // look live. `window.setInterval`/`clearInterval` (not the bare globals) keep this on
+    // the DOM timer types rather than Node's, and the cleanup below is what stops it from
+    // outliving the component — including in tests, where an unmounted-but-still-ticking
+    // Taskbar would otherwise keep scheduling `setState` calls for the rest of the run.
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
@@ -2716,6 +2826,9 @@ export default function Taskbar() {
         {windows.map(instance => (
           <button
             key={instance.id}
+            // `Window.tsx`'s Minimize handler focuses this id directly after minimising,
+            // rather than Desktop reconstructing intent from a state diff — see Window.tsx.
+            id={`taskbar-${instance.id}`}
             type="button"
             onClick={() => toggleFromTaskbar(instance.id)}
             aria-pressed={focused === instance.id}
@@ -2733,7 +2846,21 @@ export default function Taskbar() {
 }
 ```
 
-- [ ] **Step 5: Implement `Desktop.tsx`**
+- [x] **Step 5: Implement `Desktop.tsx`**
+
+The first draft matched the brief closely, plus two ref maps and a `useEffect` that diffed
+`windows` across renders to decide whether a window had just closed or been minimised, and
+sent focus to that window's icon or taskbar button accordingly. Round-1 review found that
+diff ambiguous in exactly the case that matters most for mobile: on mobile, opening a second
+window discards the first outright (`singleWindow: true`), which the diff could not
+distinguish from that first window closing — so opening Contact while Projects was open
+sent focus backwards, to Projects' now-hidden icon, instead of leaving it in the new Contact
+window. The fix moves focus restoration into the control that causes the change (see
+`Window.tsx` below) and deletes the ref maps, the diffing effect and `forwardRef` entirely —
+about 45 lines down to a handful of `id` props. `Desktop.tsx` also now applies `inert` (I5)
+to the icon column and summary block while a mobile window covers them, so they drop out of
+the tab order instead of staying reachable while invisible, and both get a `data-testid` so
+tests can target them without depending on icon count or label text:
 
 ```tsx
 import { profile } from "../../content/profile";
@@ -2744,15 +2871,29 @@ import Taskbar from "./Taskbar";
 import WindowLayer from "./WindowLayer";
 
 export default function Desktop() {
-  const { open } = useWindows();
+  const { open, isMobile, focused } = useWindows();
+
+  // On mobile a window goes full-screen and covers the icons and summary block entirely
+  // (see Window.tsx's mobile frame), but without this they would stay in the tab order —
+  // invisible stops for keyboard and screen-reader users navigating past the window that
+  // is actually on screen. `focused !== null` means an unminimised window is being shown
+  // (see `focusedId` in state.ts), which is exactly when there is something covering them.
+  const hiddenBehindMobileWindow = isMobile && focused !== null;
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#008080]">
       <main className="relative flex-1 overflow-hidden">
-        <div className="flex flex-col items-start gap-2 p-4">
+        <div
+          // Test-only: lets tests target this exact container regardless of icon count or
+          // label text (see Desktop.test.tsx's `inert` assertions).
+          data-testid="desktop-icons"
+          className="flex flex-col items-start gap-2 p-4"
+          inert={hiddenBehindMobileWindow}
+        >
           {DESKTOP_ORDER.map(id => (
             <DesktopIcon
               key={id}
+              id={`icon-${id}`}
               label={REGISTRY[id].title}
               icon={REGISTRY[id].icon}
               onOpen={() => open(id)}
@@ -2760,7 +2901,14 @@ export default function Desktop() {
           ))}
         </div>
 
-        <div className="pointer-events-none absolute bottom-8 right-8 max-w-md text-right text-white md:max-w-lg">
+        <div
+          // Test-only: see the `data-testid="desktop-icons"` note above.
+          data-testid="desktop-summary"
+          // pointer-events-none keeps this decorative block from swallowing clicks meant
+          // for a window rendered beneath it (see WindowLayer, which is a sibling below).
+          className="pointer-events-none absolute bottom-8 right-8 max-w-md text-right text-white md:max-w-lg"
+          inert={hiddenBehindMobileWindow}
+        >
           <h1 className="mb-2 text-4xl font-bold">{profile.name}</h1>
           <p className="mb-2 text-sm">{profile.headline}</p>
           <p className="text-sm leading-snug">{profile.summary}</p>
@@ -2777,7 +2925,73 @@ export default function Desktop() {
 
 `pointer-events-none` on the summary block keeps it from swallowing clicks meant for windows beneath it.
 
-- [ ] **Step 6: Rewrite `App.tsx`**
+- [x] **Step 5a (round-1 addition): move focus restoration into `Window.tsx`**
+
+`Window.tsx` is Task 8 code, but this is the step that changed it, so it belongs here. The
+Close and Minimize handlers, and the Escape handler, now call `close`/`minimise` via
+`flushSync` and then look up their own focus-return target by id (`icon-${id}` or
+`taskbar-${id}`) rather than `Desktop` inferring it after the fact:
+
+```tsx
+/**
+ * Focus-return targets for closing/minimising a window, keyed by id (see `DesktopIcon.tsx`
+ * and `Taskbar.tsx`, which render elements with exactly these ids). Reconstructing "what
+ * should get focus" from a state diff after the fact was tried and dropped — see this
+ * section's fix round 1 note — because it cannot tell "this window closed" apart from
+ * "this window was discarded by another OPEN on mobile", where the reducer clears every
+ * other window (`singleWindow: true`). The control that causes the change knows
+ * unambiguously what it did, so it is what restores focus.
+ */
+function focusIcon(id: WindowId) {
+  document.getElementById(`icon-${id}`)?.focus();
+}
+
+function focusTaskbarButton(id: WindowId) {
+  document.getElementById(`taskbar-${id}`)?.focus();
+}
+
+// ...inside Window():
+
+// `flushSync` forces the close/minimise state update (and, on mobile, the resulting
+// `inert` removal from the icon column/taskbar — see Desktop.tsx) to commit before the
+// next line runs. Without it, the remaining synchronous code below would still be
+// looking at last render's DOM, where the target could still be `inert` and refuse a
+// programmatic `.focus()` call.
+const handleClose = useCallback(() => {
+  flushSync(() => close(id));
+  focusIcon(id);
+}, [close, id]);
+
+const handleMinimise = useCallback(() => {
+  flushSync(() => minimise(id));
+  focusTaskbarButton(id);
+}, [minimise, id]);
+
+useEffect(() => {
+  if (!focused) return;
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") handleClose();
+  };
+  document.addEventListener("keydown", onKeyDown);
+  return () => document.removeEventListener("keydown", onKeyDown);
+}, [focused, handleClose]);
+```
+
+`flushSync` is the one addition beyond what review specified: without it, `inert` (added in
+the same round, to the icon column/taskbar button's containers) could still be true on the
+target at the exact moment `.focus()` runs, since the state update it depends on has not yet
+committed — the DOM a synchronous handler sees between two of its own statements is still
+last render's. `flushSync` forces the commit first. React 19 flushing discrete event updates
+synchronously is true of *existence* (the icon and taskbar button are always mounted, never
+conditionally, so neither needed the flush to be found at all) but not of *attribute
+freshness*, which is what `inert` depends on and what `flushSync` actually buys here.
+
+I4 was also fixed on `Window.tsx` in this pass: the mobile frame's height was
+`calc(100% - ${TASKBAR_HEIGHT}px)`, double-subtracting the taskbar's height because the
+`100%` it starts from already resolves against `main`, whose height already excludes the
+taskbar (see `Desktop.tsx`'s flex column). It is now plain `height: "100%"`.
+
+- [x] **Step 6: Rewrite `App.tsx`**
 
 ```tsx
 import Desktop from "./windows/components/Desktop";
@@ -2792,10 +3006,16 @@ export default function App() {
 }
 ```
 
-- [ ] **Step 7: Run the whole suite**
+`src/App.test.tsx` needed no changes — its existing `getByRole("main")` assertion already
+holds against `Desktop`'s `<main>`.
+
+- [x] **Step 7: Run the whole suite**
 
 Run: `npm test`
 Expected: PASS, including the Task 1 smoke test — `Desktop` renders a `main` landmark.
+Shipped at 90 tests (77 before this task, +7 in the first Desktop.test.tsx draft, +1 in
+Taskbar.test.tsx, +5 added during round-1 review: the mobile focus-restoration regression
+test, `aria-pressed`, `pointer-events-none`, and two `inert` tests).
 
 - [ ] **Step 8: Verify it in a browser**
 
@@ -2807,13 +3027,79 @@ Check by hand, because these are the parts the tests deliberately do not cover:
 - at a narrow window width, windows go full-screen and the title bar no longer drags
 - the CV downloads
 
-- [ ] **Step 9: Commit**
+Deliberately not run by the implementing agent in either round — the coordinator verifies this manually.
+
+- [x] **Step 9: Commit**
 
 ```bash
 git checkout -b feat/desktop-and-taskbar
 git add src
 git commit -m "feat: add desktop, icons and taskbar"
 ```
+
+- [x] **Fix round 1 (post-review hardening)**
+
+Code review found one Critical and five Important issues. Fixed on the same branch, in a
+second commit:
+
+- **C1 (Critical) — on mobile, opening a second window sent focus to the wrong icon.**
+  `Desktop`'s first draft restored focus by diffing the reducer's `windows` array across
+  renders: a window that was previously open and unminimised, and is now absent, was
+  assumed to have *closed*, and focus went to its icon. But on mobile `OPEN` carries
+  `singleWindow: true`, which discards every other window — so opening Contact while
+  Projects was open also made Projects "absent", and the diff could not tell that apart
+  from Projects having closed. Focus jumped to Projects' icon, now sitting behind a
+  full-screen Contact window that Window.tsx's own mount effect had *already* focused
+  correctly — `Desktop`'s effect ran after and silently overwrote it, because child effects
+  flush before parent effects. Proven at 500px: tap Projects, then Contact, and
+  `document.activeElement` was the Projects icon.
+- **C2 — the fix: move focus restoration into the control that causes the change.**
+  Reconstructing intent from a state diff is inherently ambiguous; C1 is that ambiguity
+  surfacing. `DesktopIcon` and each taskbar button now carry derivable ids (`icon-${id}`,
+  `taskbar-${id}`), and `Window.tsx`'s Close/Minimize/Escape handlers call
+  `close`/`minimise` and then focus their own known target by id directly (see Step 5a
+  above). This deletes both ref maps, the diffing effect, `previousWindowsRef` and
+  `forwardRef` — roughly 45 lines down to a handful of `id` props and two focus-lookup
+  functions — and fixes C1 for free: opening a second window no longer runs any effect that
+  second-guesses which window Window.tsx's own mount-focus effect just focused correctly.
+  The two original focus-return tests (close → icon, minimise → taskbar button) still pass
+  unchanged; a new test proves the mobile regression is gone by opening Projects then
+  Contact at 500px and asserting focus stays inside the Contact dialog.
+- **I1 — `aria-pressed` was untested.** Inverting it entirely
+  (`focused !== instance.id`) left all 85 tests passing. Added a test that opens two
+  windows and asserts the focused one's taskbar button is `aria-pressed="true"` and the
+  other's is `"false"`.
+- **I2 — `pointer-events-none` was untested.** Removing it left all 85 tests passing. A
+  true click-through test is awkward in jsdom, so the added test asserts the class directly
+  on the summary block (now reachable via `data-testid="desktop-summary"`), with a comment
+  on why the class matters.
+- **I3 — dropped `forwardRef` from `DesktopIcon`.** Moot once C2 removed the ref entirely,
+  but the deprecated pattern would otherwise have been left behind.
+- **I4 — mobile windows were 40px too short.** See Step 5a above: `Window.tsx`'s mobile
+  frame double-subtracted `TASKBAR_HEIGHT`, since the `100%` it started from (`main`'s
+  height) already excluded the taskbar. Now plain `height: "100%"`. This is Task 8 code, but
+  Task 9 is the first commit where a mobile window actually renders, so the gap was only
+  visible here.
+- **I5 — desktop icons stayed tabbable behind a full-screen mobile window.** Non-modal is
+  right on desktop, but at mobile widths the open window covers everything and the four
+  icons (plus the name/summary block) were still reachable by keyboard while invisible.
+  `Desktop.tsx` now applies `inert` to both when `isMobile && focused !== null`. Two tests
+  cover both branches: inert on mobile with a window open, not inert on desktop with a
+  window open.
+- **Test/report accuracy fixes:** `Taskbar.test.tsx`'s `as number` cast on the interval id
+  was removed — under `vi.useFakeTimers()` it is a `Timeout`-like object, not a real
+  `number`, despite the DOM-typed signature. Its dead `vi.advanceTimersByTime(60_000)` line
+  (asserted nothing; React 19 silently ignores `setState` after unmount regardless) was
+  deleted, leaving `expect(clearSpy).toHaveBeenCalledWith(timerId)` as the one load-bearing
+  assertion. Every icon lookup in `Desktop.test.tsx` is now scoped with
+  `within(screen.getByRole("main"))`, including the one flagged in review that happened to
+  work only because closing (unlike minimising) also removes the matching taskbar button.
+  The task-9 report's claim that focus restoration "diffs ... each render" was corrected —
+  it ran in a `useEffect`, not during render; that distinction is the difference between a
+  sound pattern and an anti-pattern, and StrictMode safety depends on it.
+
+Test count grew from 85 to 90 across the whole suite (72 of those in `src/windows`).
+`npm run lint && npm run typecheck && npm test && npm run build` all pass.
 
 ---
 
