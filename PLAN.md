@@ -1007,8 +1007,14 @@ export default function ProjectsWindow() {
         const headingId = `project-${project.name.replace(/\W+/g, "-").toLowerCase()}`;
         return (
           <article key={project.name} aria-labelledby={headingId}>
-            <fieldset>
-              <legend id={headingId}>{project.name}</legend>
+            {/* `.sunken-panel` is 98.css's inset-border primitive. Do not use
+                <fieldset>/<legend> here: that element groups form controls, and
+                borrowing it for chrome means the project name is exposed only as a
+                fieldset's accessible name, so heading navigation never reaches it. */}
+            <div className="sunken-panel p-3">
+              <h3 id={headingId} className="mb-2 font-bold">
+                {project.name}
+              </h3>
 
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <span className="border border-black px-1 text-xs">
@@ -1039,7 +1045,7 @@ export default function ProjectsWindow() {
                   </a>
                 )}
               </div>
-            </fieldset>
+            </div>
           </article>
         );
       })}
