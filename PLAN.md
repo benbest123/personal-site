@@ -475,7 +475,8 @@ export const profile: Profile = {
     "Data engineer with four years' commercial experience across financial services, " +
     "law, and technology, most recently in a data-engineering and full-stack role at " +
     "Visa. Comfortable owning projects end to end, from cloud infrastructure and ETL " +
-    "through to the interfaces that surface data to users.",
+    "through to the interfaces that surface data to users. Based in London with full " +
+    "right to work.",
   location: "London, UK",
   email: "benbest987@gmail.com",
   links: [
@@ -1012,7 +1013,7 @@ export default function ProjectsWindow() {
                 borrowing it for chrome means the project name is exposed only as a
                 fieldset's accessible name, so heading navigation never reaches it. */}
             <div className="sunken-panel p-3">
-              <h3 id={headingId} className="mb-2 font-bold">
+              <h3 id={headingId} className="mb-2 text-sm font-bold">
                 {project.name}
               </h3>
 
