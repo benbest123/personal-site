@@ -1,3 +1,10 @@
+import Desktop from "./windows/components/Desktop";
+import { WindowsProvider } from "./windows/WindowsProvider";
+
 export default function App() {
-  return <main className="h-screen w-screen bg-[#008080]" />;
+  return (
+    <WindowsProvider>
+      <Desktop />
+    </WindowsProvider>
+  );
 }
