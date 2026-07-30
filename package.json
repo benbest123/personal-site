@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "98.css": "^0.1.21",
@@ -34,6 +35,7 @@
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.7.0",
     "jsdom": "^29.1.1",
+    "patch-package": "^8.0.1",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.65.0",
