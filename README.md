@@ -7,6 +7,18 @@ Built with Vite, React 19, TypeScript and Tailwind v4. Window chrome comes from
 [98.css](https://jdan.github.io/98.css/); the window manager — opening, focusing,
 stacking, minimising and dragging — is a hand-written reducer in `src/windows/state.ts`.
 
+## What's here
+
+A teal desktop with four draggable, focusable windows — About Me, CV, Projects and
+Contact — opened from desktop icons, tracked in a taskbar with a clock, and minimisable
+back to that taskbar. Below 768px, windows go full-screen and only one is open at a
+time. The CV is readable inline and downloadable as a PDF. Everything is a static
+build: no backend, no router, no data fetching.
+
+**Hosting is not yet chosen.** v1 is a plain static build with no host-specific code, so
+picking a target (and adding a deploy workflow) is deliberately deferred — see
+`docs/DESIGN.md` and the "Follow-ups" section of `PLAN.md`.
+
 ## Running it
 
 ```bash
