@@ -64,7 +64,10 @@ export default function Window({
       onPointerDown={() => focus(id)}
     >
       <div
-        className="title-bar"
+        // 98.css draws an active (blue) vs. inactive (grey) title bar via this class.
+        // With up to four dialogs open at once, this is the only visual cue for which
+        // one is active, for sighted users and not just for the Escape-key behaviour.
+        className={focused ? "title-bar" : "title-bar inactive"}
         style={{ cursor: isMobile ? "default" : "move" }}
         {...handlers}
         onPointerDown={event => {

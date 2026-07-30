@@ -32,11 +32,31 @@ export function useDrag({ position, disabled, onCommit }: UseDragOptions) {
   function onPointerUp(event: ReactPointerEvent<HTMLElement>) {
     if (!start.current) return;
     event.currentTarget.releasePointerCapture(event.pointerId);
-    const { origin } = start.current;
-    const moved = offset ?? { x: 0, y: 0 };
+    const { origin, pointer } = start.current;
     start.current = null;
     setOffset(null);
-    onCommit({ x: origin.x + moved.x, y: origin.y + moved.y });
+    // Computed from the event's own coordinates, not from `offset` state: if pointerdown,
+    // pointermove and pointerup all land inside a single React batch, `offset` here can
+    // still hold the stale `{ x: 0, y: 0 }` set by pointerdown, even though the pointer has
+    // genuinely moved in between. `event.clientX/clientY` are always current, so the
+    // commit can never fall behind the gesture that produced it.
+    onCommit({
+      x: origin.x + (event.clientX - pointer.x),
+      y: origin.y + (event.clientY - pointer.y),
+    });
+  }
+
+  // A `pointercancel` means the browser took the gesture away — a touch-scroll takeover, a
+  // pen leaving range, the window losing focus — not that the user released the pointer at
+  // its current position. The gesture must be abandoned, not committed: no `onCommit`, and
+  // no `releasePointerCapture` either, since per the Pointer Events spec the pointer is
+  // already inactive by the time `pointercancel` fires and real browsers throw calling it
+  // again (jsdom's stub does not model this, which is why aliasing this to `onPointerUp`
+  // stayed silent under test).
+  function onPointerCancel() {
+    if (!start.current) return;
+    start.current = null;
+    setOffset(null);
   }
 
   const dragPosition = offset
@@ -45,6 +65,6 @@ export function useDrag({ position, disabled, onCommit }: UseDragOptions) {
 
   return {
     dragPosition,
-    handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp },
+    handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel },
   };
 }
