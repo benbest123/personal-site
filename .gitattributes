@@ -1,0 +1,11 @@
+# Normalise line endings: LF in the repository, native in the working copy.
+# Keeps diffs clean between a Windows workstation and Ubuntu CI runners.
+* text=auto eol=lf
+
+# Binary files, never converted or diffed as text.
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
