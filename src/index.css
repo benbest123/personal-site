@@ -50,3 +50,11 @@ body {
   outline-offset: -2px;
   background: rgb(255 255 255 / 0.25);
 }
+
+/* 98.css sets `outline: none` on title-bar buttons (Minimize/Close) with no replacement,
+   leaving keyboard users with no visible focus indicator on otherwise-reachable,
+   correctly-named controls. Same fix as `.desktop-icon:focus-visible` above. */
+.title-bar-controls button:focus-visible {
+  outline: 1px dotted #000;
+  outline-offset: 1px;
+}

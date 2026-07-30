@@ -2039,16 +2039,20 @@ breakpoint-isolation grep (`grep -rnE "innerWidth|innerHeight|768" src/`) still 
 **Files:**
 - Modify: `src/windows/registry.ts` (replace the provisional version from Task 7)
 - Create: `src/windows/useDrag.ts`, `src/windows/components/Window.tsx`, `src/windows/components/WindowLayer.tsx`
-- Test: `src/windows/components/Window.test.tsx`
+- Test: `src/windows/components/Window.test.tsx`, `src/windows/useDrag.test.ts` (added in the
+  round-1 hardening pass described at the end of this section)
 
 **Interfaces:**
 - Consumes: `useWindows()` from Task 7; the four app components from Tasks 4–5.
-- Produces:
+- Produces (as shipped, after the round-1 hardening pass described at the end of this
+  section — `WindowLayer` renders in `DESKTOP_ORDER`, not reducer array order, and
+  `useDrag`'s `onPointerCancel` is its own handler rather than an alias for `onPointerUp`):
   - `REGISTRY: Record<WindowId, WindowDef>` where `WindowDef = { title: string; icon: string; component: ComponentType; defaultSize: Size }`
-  - `DESKTOP_ORDER: WindowId[]` — the order icons appear on the desktop
+  - `DESKTOP_ORDER: WindowId[]` — the order icons appear on the desktop, and now also the
+    fixed DOM order `WindowLayer` renders windows in, independent of stacking order
   - `WindowLayer: () => JSX.Element` — Task 9 renders this
 
-- [ ] **Step 1: Replace `registry.ts`**
+- [x] **Step 1: Replace `registry.ts`**
 
 Icons are emoji, matching the approach in `ben-fullstack-win95-portfolio`. Swapping in 16×16 PNGs later changes only this file.
 
@@ -2098,9 +2102,16 @@ export const REGISTRY: Record<WindowId, WindowDef> = {
 export const DESKTOP_ORDER: WindowId[] = ["about", "cv", "projects", "contact"];
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
-`src/windows/components/Window.test.tsx`:
+`src/windows/components/Window.test.tsx` — the version below is what actually shipped,
+after the round-1 hardening pass (see the note at the end of this section) fixed the DOM
+order used for the stacking assertion, strengthened two tests that passed without
+exercising what they claimed to, and added a test for the `.inactive` title bar. The first
+draft matched the brief's snippet verbatim (7 tests, dialogs compared by document position);
+review found the stacking test's document-position comparison would break once windows
+render in a fixed `DESKTOP_ORDER` rather than open order, and that two tests were not
+load-bearing:
 
 ```tsx
 import { render, screen } from "@testing-library/react";
@@ -2110,11 +2121,14 @@ import { useWindows } from "../useWindows";
 import WindowLayer from "./WindowLayer";
 
 function Harness() {
-  const { open } = useWindows();
+  const { open, windows } = useWindows();
   return (
     <>
       <button onClick={() => open("cv")}>open cv</button>
       <button onClick={() => open("projects")}>open projects</button>
+      {/* Test-only: exposes what a taskbar (Task 9) would show, so a test at this layer can
+          tell "minimised" apart from "closed" without reaching into the reducer directly. */}
+      <p data-testid="open-count">{windows.length}</p>
       <WindowLayer />
     </>
   );
@@ -2151,6 +2165,7 @@ describe("Window", () => {
     await user.click(screen.getByText("open cv"));
     await user.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("open-count")).toHaveTextContent("0");
   });
 
   it("hides a minimised window but keeps it open", async () => {
@@ -2158,7 +2173,12 @@ describe("Window", () => {
     renderDesktop();
     await user.click(screen.getByText("open cv"));
     await user.click(screen.getByRole("button", { name: "Minimize" }));
+    // The dialog itself is gone either way (closed or minimised) — the thing that actually
+    // distinguishes minimising from closing is that the instance survives in `windows`, so
+    // its taskbar button (Task 9) would still be there. Assert that survival, not just the
+    // dialog's absence.
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("open-count")).toHaveTextContent("1");
   });
 
   it("moves focus into the window when it opens", async () => {
@@ -2168,12 +2188,15 @@ describe("Window", () => {
     expect(screen.getByRole("dialog")).toContainElement(document.activeElement as HTMLElement);
   });
 
-  it("closes the focused window on Escape", async () => {
+  it("closes the focused window on Escape, leaving unfocused windows open", async () => {
     const user = userEvent.setup();
     renderDesktop();
     await user.click(screen.getByText("open cv"));
+    await user.click(screen.getByText("open projects"));
+    // projects was opened last, so it is focused; only it should close.
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Projects" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Benjamin_Best_CV" })).toBeInTheDocument();
   });
 
   it("stacks the most recently opened window on top", async () => {
@@ -2181,9 +2204,57 @@ describe("Window", () => {
     renderDesktop();
     await user.click(screen.getByText("open cv"));
     await user.click(screen.getByText("open projects"));
-    const dialogs = screen.getAllByRole("dialog");
-    const zIndexes = dialogs.map(d => Number(getComputedStyle(d).zIndex));
-    expect(zIndexes[1]).toBeGreaterThan(zIndexes[0]);
+    const cvZIndex = Number(
+      getComputedStyle(screen.getByRole("dialog", { name: "Benjamin_Best_CV" })).zIndex
+    );
+    const projectsZIndex = Number(
+      getComputedStyle(screen.getByRole("dialog", { name: "Projects" })).zIndex
+    );
+    expect(projectsZIndex).toBeGreaterThan(cvZIndex);
+  });
+
+  it("keeps windows in a stable DOM order when a background window is focused", async () => {
+    // Focusing a background window changes its `zIndex` (asserted above) but must not
+    // reorder the DOM: `WindowLayer` renders in a fixed order (`DESKTOP_ORDER`) precisely
+    // so that focusing never moves a window's DOM node. If it did, a real browser would
+    // implicitly release that window's pointer capture the instant the node moved — a bug
+    // jsdom's pointer-capture stub cannot surface, so the meaningful thing to assert here
+    // is the precondition it depends on: DOM order is unaffected by which window is on top.
+    const user = userEvent.setup();
+    renderDesktop();
+    await user.click(screen.getByText("open cv"));
+    await user.click(screen.getByText("open projects"));
+    const namesBefore = screen.getAllByRole("dialog").map(d => d.getAttribute("aria-label"));
+
+    // projects opened last, so it is focused; clicking cv brings the background window forward.
+    await user.click(screen.getByRole("dialog", { name: "Benjamin_Best_CV" }));
+    const namesAfter = screen.getAllByRole("dialog").map(d => d.getAttribute("aria-label"));
+
+    expect(namesAfter).toEqual(namesBefore);
+    const cvZIndex = Number(
+      getComputedStyle(screen.getByRole("dialog", { name: "Benjamin_Best_CV" })).zIndex
+    );
+    const projectsZIndex = Number(
+      getComputedStyle(screen.getByRole("dialog", { name: "Projects" })).zIndex
+    );
+    expect(cvZIndex).toBeGreaterThan(projectsZIndex);
+  });
+
+  it("marks the focused window's title bar active and background windows inactive", async () => {
+    const user = userEvent.setup();
+    renderDesktop();
+    await user.click(screen.getByText("open cv"));
+    await user.click(screen.getByText("open projects"));
+
+    const cvTitleBar = screen
+      .getByRole("dialog", { name: "Benjamin_Best_CV" })
+      .querySelector(".title-bar");
+    const projectsTitleBar = screen
+      .getByRole("dialog", { name: "Projects" })
+      .querySelector(".title-bar");
+
+    expect(cvTitleBar).toHaveClass("inactive");
+    expect(projectsTitleBar).not.toHaveClass("inactive");
   });
 });
 ```
@@ -2193,9 +2264,17 @@ describe("Window", () => {
 Run: `npm test src/windows/components/Window.test.tsx`
 Expected: FAIL — cannot resolve `./WindowLayer`.
 
-- [ ] **Step 4: Implement `useDrag.ts`**
+- [x] **Step 4: Implement `useDrag.ts`**
 
 The in-flight offset stays local, so dragging does not re-render the whole desktop. One `MOVE` is dispatched on release.
+
+The version below is what actually shipped, after the round-1 hardening pass (see the note
+at the end of this section) replaced the brief's snippet, which had two real bugs jsdom
+cannot detect: `onPointerCancel` was aliased to `onPointerUp` (committing an aborted gesture
+instead of discarding it, and calling `releasePointerCapture` on an already-inactive
+pointer, which real browsers throw on), and `onPointerUp` read the in-flight offset from
+React state rather than from the event, which is stale if pointerdown/pointermove/pointerup
+land inside a single React batch.
 
 ```ts
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
@@ -2232,11 +2311,31 @@ export function useDrag({ position, disabled, onCommit }: UseDragOptions) {
   function onPointerUp(event: ReactPointerEvent<HTMLElement>) {
     if (!start.current) return;
     event.currentTarget.releasePointerCapture(event.pointerId);
-    const { origin } = start.current;
-    const moved = offset ?? { x: 0, y: 0 };
+    const { origin, pointer } = start.current;
     start.current = null;
     setOffset(null);
-    onCommit({ x: origin.x + moved.x, y: origin.y + moved.y });
+    // Computed from the event's own coordinates, not from `offset` state: if pointerdown,
+    // pointermove and pointerup all land inside a single React batch, `offset` here can
+    // still hold the stale `{ x: 0, y: 0 }` set by pointerdown, even though the pointer has
+    // genuinely moved in between. `event.clientX/clientY` are always current, so the
+    // commit can never fall behind the gesture that produced it.
+    onCommit({
+      x: origin.x + (event.clientX - pointer.x),
+      y: origin.y + (event.clientY - pointer.y),
+    });
+  }
+
+  // A `pointercancel` means the browser took the gesture away — a touch-scroll takeover, a
+  // pen leaving range, the window losing focus — not that the user released the pointer at
+  // its current position. The gesture must be abandoned, not committed: no `onCommit`, and
+  // no `releasePointerCapture` either, since per the Pointer Events spec the pointer is
+  // already inactive by the time `pointercancel` fires and real browsers throw calling it
+  // again (jsdom's stub does not model this, which is why aliasing this to `onPointerUp`
+  // stayed silent under test).
+  function onPointerCancel() {
+    if (!start.current) return;
+    start.current = null;
+    setOffset(null);
   }
 
   const dragPosition = offset
@@ -2245,14 +2344,20 @@ export function useDrag({ position, disabled, onCommit }: UseDragOptions) {
 
   return {
     dragPosition,
-    handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp },
+    handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel },
   };
 }
 ```
 
-- [ ] **Step 5: Implement `Window.tsx`**
+- [x] **Step 5: Implement `Window.tsx`**
 
 98.css requires the exact `aria-label` values `"Minimize"` and `"Close"` on the title-bar controls to render the right glyphs — the one place American spelling is used.
+
+The version below is what actually shipped, after the round-1 hardening pass (see the note
+at the end of this section) applied 98.css's `.inactive` class to the title bar when the
+window is not focused. Without it, focus state had no visible representation at all — with
+up to four dialogs open, nothing distinguished the active window from the background ones
+for a sighted user.
 
 ```tsx
 import { useEffect, useRef, type ReactNode } from "react";
@@ -2321,7 +2426,10 @@ export default function Window({
       onPointerDown={() => focus(id)}
     >
       <div
-        className="title-bar"
+        // 98.css draws an active (blue) vs. inactive (grey) title bar via this class.
+        // With up to four dialogs open at once, this is the only visual cue for which one
+        // is active, for sighted users and not just for the Escape-key behaviour.
+        className={focused ? "title-bar" : "title-bar inactive"}
         style={{ cursor: isMobile ? "default" : "move" }}
         {...handlers}
         onPointerDown={event => {
@@ -2344,31 +2452,51 @@ export default function Window({
 }
 ```
 
-- [ ] **Step 6: Implement `WindowLayer.tsx`**
+- [x] **Step 6: Implement `WindowLayer.tsx`**
+
+The version below is what actually shipped, after the round-1 hardening pass (see the note
+at the end of this section) replaced the brief's `windows.map(...)`, which rendered windows
+in reducer array order — the same order that changes on every `FOCUS`. Since the array
+order was also the DOM order, focusing a background window reordered the keyed list and
+React moved that window's DOM node in the tree, which implicitly releases pointer capture
+per the Pointer Events spec. The fix renders in the fixed `DESKTOP_ORDER` instead, and uses
+the window's position in the reducer's array *only* to compute `zIndex` — stacking is still
+fully array-order-derived, but the DOM itself never reorders.
 
 ```tsx
-import { REGISTRY } from "../registry";
+import { DESKTOP_ORDER, REGISTRY } from "../registry";
 import { useWindows } from "../useWindows";
 import Window from "./Window";
 
+/**
+ * Rendered in the fixed `DESKTOP_ORDER`, never in the reducer's array order. Stacking is
+ * still fully determined by array order via `zIndex` below — but if the DOM order tracked
+ * the array too, focusing a background window would reorder this keyed list and React
+ * would move that window's DOM node. Moving the element that currently holds pointer
+ * capture implicitly releases it (Pointer Events spec), which would silently break a drag
+ * that starts on a window brought forward by the same gesture. A fixed DOM order sidesteps
+ * that entirely: only `style.zIndex` changes, never which node sits where in the tree.
+ */
 export default function WindowLayer() {
   const { windows, focused } = useWindows();
 
   return (
     <>
-      {windows.map((instance, index) => {
-        if (instance.minimised) return null;
-        const def = REGISTRY[instance.id];
+      {DESKTOP_ORDER.map(id => {
+        const instance = windows.find(w => w.id === id);
+        if (!instance || instance.minimised) return null;
+        const zIndex = windows.indexOf(instance) + 1;
+        const def = REGISTRY[id];
         const Body = def.component;
         return (
           <Window
-            key={instance.id}
-            id={instance.id}
+            key={id}
+            id={id}
             title={def.title}
             position={instance.position}
             size={instance.size}
-            zIndex={index + 1}
-            focused={focused === instance.id}
+            zIndex={zIndex}
+            focused={focused === id}
           >
             <Body />
           </Window>
@@ -2379,18 +2507,74 @@ export default function WindowLayer() {
 }
 ```
 
-- [ ] **Step 7: Run the tests**
+- [x] **Step 7: Run the tests**
 
 Run: `npm test src/windows`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git checkout -b feat/window-chrome
 git add src/windows
 git commit -m "feat: add window chrome, drag handling and window layer"
 ```
+
+- [x] **Fix round 1 (post-review hardening)**
+
+Code review found three real browser bugs that jsdom's pointer-event/pointer-capture stubs
+structurally cannot detect (which is exactly why the suite was green with them present),
+plus one missing accessibility affordance and two tests that passed without exercising what
+they claimed to. Fixed on the same branch, in a second commit:
+
+- **`pointercancel` committed an aborted gesture instead of reverting it.** `useDrag`
+  aliased `onPointerCancel` to `onPointerUp`, so a cancelled gesture (touch-scroll takeover,
+  pen leaving range) left the window at the moved position instead of snapping back, and
+  called `releasePointerCapture` on a pointer the Pointer Events spec already considers
+  inactive by the time `pointercancel` fires — real browsers throw there; jsdom's stub does
+  not model it. `onPointerCancel` is now its own handler: it clears `start.current` and the
+  offset without calling `onCommit` and without releasing capture.
+- **`onPointerUp` read the in-flight offset from a stale closure.** If pointerdown,
+  pointermove and pointerup land inside a single React batch, `offset` state can still hold
+  the value set by pointerdown, silently discarding the drag. The commit is now computed
+  from the event's own `clientX`/`clientY` against the coordinates captured at
+  `pointerdown`, which removes the whole class of staleness rather than patching around it.
+- **Focusing a background window defeated its own pointer capture.** `Window`'s outer
+  `<div>` dispatches `focus(id)` on pointerdown, which moves that window's entry to the end
+  of the reducer's array; `WindowLayer` rendered a keyed list in that same array order, so
+  React reparented the DOM node the instant the gesture began — and moving the element
+  holding pointer capture implicitly releases it. Fixed by rendering `WindowLayer` in the
+  fixed `DESKTOP_ORDER` (see Step 6 above) and using array position only to compute
+  `zIndex`. The DOM order is proved stable across a focus change by a new test; the earlier
+  stacking test (which compared dialogs by document position) was rewritten to select by
+  accessible name, since document position is no longer tied to open order.
+- **Nothing ever looked unfocused.** `focused` only gated the Escape listener; 98.css ships
+  a `.title-bar.inactive` style that nothing in `src/` used, so with up to four `role="dialog"`
+  windows open, no sighted or assistive-technology user could tell which was active.
+  `Window` now applies `inactive` to the title bar whenever it is not focused; covered by a
+  new test asserting the focused window's title bar lacks the class and a background
+  window's has it.
+- **Two tests were not load-bearing**, both proved by injection: "hides a minimised window
+  but keeps it open" asserted only that the dialog was gone, which is equally true if the
+  window had been closed — it never tested the "keeps it open" half of its own name. It now
+  also asserts the window survives in `windows` (exposed test-only via an `open-count`
+  element in the harness, standing in for what a taskbar button would show). "closes the
+  focused window on Escape" opened only one window, so the `if (!focused) return` guard was
+  provably unnecessary to pass it. It now opens two windows and asserts Escape closes only
+  the focused one.
+- **Title-bar controls had no visible focus indicator.** 98.css sets `outline: none` on
+  `.title-bar-controls button:focus`. `src/index.css` already solves the identical problem
+  for `.desktop-icon:focus-visible`; the same fix (`outline: 1px dotted #000; outline-offset:
+  1px;`) is now applied to `.title-bar-controls button:focus-visible`.
+- Added `src/windows/useDrag.test.ts`: two unit tests calling the hook's handlers directly
+  with hand-built pointer events, rather than firing a real gesture through jsdom (which
+  is deliberately out of scope, per docs/DESIGN.md §8, precisely because jsdom's pointer
+  capture cannot be trusted). One proves the stale-closure fix by dispatching
+  pointerdown/pointermove/pointerup inside a single `act` and asserting the commit still
+  uses the moved coordinates; the other proves `pointercancel` never calls `onCommit`.
+
+Test count grew from 55 to 59 in `src/windows` (77 across the whole suite).
+`npm run lint && npm run typecheck && npm test && npm run build` all pass.
 
 ---
 
