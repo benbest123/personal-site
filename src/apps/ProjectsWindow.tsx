@@ -14,8 +14,10 @@ export default function ProjectsWindow() {
         const headingId = `project-${project.name.replace(/\W+/g, "-").toLowerCase()}`;
         return (
           <article key={project.name} aria-labelledby={headingId}>
-            <fieldset>
-              <legend id={headingId}>{project.name}</legend>
+            <div className="sunken-panel p-3">
+              <h3 id={headingId} className="mb-2 text-sm font-bold">
+                {project.name}
+              </h3>
 
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <span className="border border-black px-1 text-xs">
@@ -46,7 +48,7 @@ export default function ProjectsWindow() {
                   </a>
                 )}
               </div>
-            </fieldset>
+            </div>
           </article>
         );
       })}
