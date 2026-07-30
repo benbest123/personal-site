@@ -1,0 +1,52 @@
+@import "tailwindcss";
+@import "98.css";
+
+@font-face {
+  font-family: "W95FA";
+  src:
+    url("./fonts/W95FA/W95FA.woff2") format("woff2"),
+    url("./fonts/W95FA/W95FA.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Unlayered, so it beats 98.css's own bundled font on body and form controls. */
+body,
+button,
+input,
+select,
+textarea,
+.window,
+.title-bar {
+  font-family: "W95FA", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  overflow: hidden; /* the desktop owns the viewport; windows scroll internally */
+}
+
+/* A desktop icon is a <button> for keyboard and screen-reader users, but it is not
+   chrome — undo 98.css's button styling rather than trying to out-specify it. */
+.desktop-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  width: 6rem;
+  min-width: 0;
+  padding: 0.5rem;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.desktop-icon:focus-visible {
+  outline: 1px dotted #fff;
+  outline-offset: -2px;
+  background: rgb(255 255 255 / 0.25);
+}
