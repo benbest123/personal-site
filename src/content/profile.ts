@@ -7,7 +7,8 @@ export const profile: Profile = {
     "Data engineer with four years' commercial experience across financial services, " +
     "law, and technology, most recently in a data-engineering and full-stack role at " +
     "Visa. Comfortable owning projects end to end, from cloud infrastructure and ETL " +
-    "through to the interfaces that surface data to users.",
+    "through to the interfaces that surface data to users. Based in London with full " +
+    "right to work.",
   location: "London, UK",
   email: "benbest987@gmail.com",
   links: [

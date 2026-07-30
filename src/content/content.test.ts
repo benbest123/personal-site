@@ -16,6 +16,10 @@ describe("profile", () => {
     const serialised = JSON.stringify(profile);
     expect(serialised).not.toMatch(/\+44|07\d{9}/);
   });
+
+  it("states full right to work", () => {
+    expect(profile.summary).toContain("full right to work");
+  });
 });
 
 describe("projects", () => {
