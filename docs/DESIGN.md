@@ -135,10 +135,14 @@ mobile, but `state.ts` must not read `window`. Both arrive as action payload:
 
 ```ts
 type Action =
-  | { type: "OPEN"; id: WindowId; viewport: Viewport; singleWindow: boolean }
+  | { type: "OPEN"; id: WindowId; size: Size; viewport: Viewport; singleWindow: boolean }
   | { type: "MOVE"; id: WindowId; position: Point; viewport: Viewport }
   | { type: "CLOSE" | "FOCUS" | "MINIMISE" | "TOGGLE_FROM_TASKBAR"; id: WindowId };
 ```
+
+`size` travels in the payload for the same reason: a new window's default size lives in
+the registry, and the registry imports React components. Passing it in keeps `state.ts`
+free of that dependency.
 
 `WindowsProvider` owns a single `useViewport()` hook — the only place `window.innerWidth`
 and the `768px` breakpoint are read — and stamps `viewport` and `singleWindow` onto the
@@ -221,9 +225,11 @@ turns up. Its history is not cloned — it carries a todo app, auth code, and a 
 
 ## 4. Content model
 
-`src/content/cv.ts` is a typed transcription of the `cv` repo's `cv.yml`, hand-edited into
-web prose: the same verified facts, shorter bullets than the ATS version, and no phone
-number. `profile.ts` carries name, summary, email, LinkedIn and GitHub only.
+`src/content/cv.ts` is a typed transcription of the `cv` repo's `cv.yml`. Bullet text ships
+**verbatim**: those bullets are governed by that repo's verified-facts process, and only
+Ben can approve a deviation. Shortening them for the web is a deliberate follow-up he signs
+off separately, not something to do in passing during transcription. The phone number is
+omitted. `profile.ts` carries name, summary, email, LinkedIn and GitHub only.
 
 `public/Benjamin_Best_CV.pdf` is the existing master build from the `cv` repo, phone
 number included. It is refreshed by copying the file across after a rebuild there. This is
