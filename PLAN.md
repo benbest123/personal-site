@@ -1132,7 +1132,8 @@ This is the core of the project. The reducer is where the review attention goes.
   - `type WindowId = "cv" | "projects" | "about" | "contact"`
   - `interface Point { x: number; y: number }`, `Size { width, height }`, `Viewport { width, height }`
   - `interface WindowInstance { id, position, size, minimised }`
-  - `interface DesktopState { windows: WindowInstance[] }`
+  - `interface DesktopState { windows: readonly WindowInstance[] }` — `readonly` so the
+    module's immutability claim is compiler-enforced, not just convention
   - `type WindowAction` (see Step 3)
   - `clampToViewport(position: Point, size: Size, viewport: Viewport): Point`
   - `windowReducer(state: DesktopState, action: WindowAction): DesktopState`
@@ -1141,7 +1142,7 @@ This is the core of the project. The reducer is where the review attention goes.
   - `initialState: DesktopState`
   - `TASKBAR_HEIGHT: number`
 
-- [ ] **Step 1: Write the failing clamp test**
+- [x] **Step 1: Write the failing clamp test**
 
 `src/windows/clampToViewport.test.ts`:
 
@@ -1179,14 +1180,15 @@ describe("clampToViewport", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `npm test src/windows/clampToViewport.test.ts`
 Expected: FAIL — cannot resolve `./clampToViewport`.
 
-- [ ] **Step 3: Write `src/windows/types.ts` and `clampToViewport.ts`**
+- [x] **Step 3: Write `src/windows/types.ts` and `clampToViewport.ts`**
 
-`src/windows/types.ts`:
+`src/windows/types.ts` (as shipped, after the round-1 hardening pass described at the
+end of this section — `windows` is `readonly`):
 
 ```ts
 export type WindowId = "about" | "cv" | "projects" | "contact";
@@ -1211,8 +1213,14 @@ export interface WindowInstance {
 }
 
 export interface DesktopState {
-  /** Array order is z-order: the last element is topmost. */
-  windows: WindowInstance[];
+  /**
+   * Array order is z-order: the last element is topmost and focused (see
+   * `focusedId`). There is deliberately no separate `zIndex` counter or
+   * stored "focused" field — a value derived from this array can never
+   * drift out of sync with it. `readonly` makes the reducer's immutability
+   * compiler-enforced rather than a convention callers have to trust.
+   */
+  windows: readonly WindowInstance[];
 }
 
 export type WindowAction =
@@ -1224,7 +1232,8 @@ export type WindowAction =
   | { type: "TOGGLE_FROM_TASKBAR"; id: WindowId };
 ```
 
-`src/windows/clampToViewport.ts`:
+`src/windows/clampToViewport.ts` (as shipped — coordinates are rounded to whole
+pixels):
 
 ```ts
 import type { Point, Size, Viewport } from "./types";
@@ -1233,24 +1242,26 @@ export const TASKBAR_HEIGHT = 40;
 
 /**
  * Keeps a window fully inside the desktop area, so its title bar can never be
- * dragged out of reach. A window larger than the viewport is pinned to the origin.
+ * dragged out of reach. A window larger than the viewport is pinned to the
+ * origin. Coordinates are rounded to whole pixels to keep the pixel-crisp
+ * Windows 95 look intact.
  */
 export function clampToViewport(position: Point, size: Size, viewport: Viewport): Point {
   const maxX = Math.max(0, viewport.width - size.width);
   const maxY = Math.max(0, viewport.height - TASKBAR_HEIGHT - size.height);
   return {
-    x: Math.min(Math.max(position.x, 0), maxX),
-    y: Math.min(Math.max(position.y, 0), maxY),
+    x: Math.round(Math.min(Math.max(position.x, 0), maxX)),
+    y: Math.round(Math.min(Math.max(position.y, 0), maxY)),
   };
 }
 ```
 
-- [ ] **Step 4: Run the clamp tests**
+- [x] **Step 4: Run the clamp tests**
 
 Run: `npm test src/windows/clampToViewport.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Write the failing reducer tests**
+- [x] **Step 5: Write the failing reducer tests**
 
 `src/windows/state.test.ts`:
 
@@ -1406,20 +1417,25 @@ describe("MOVE", () => {
 });
 ```
 
-- [ ] **Step 6: Run them and watch them fail**
+- [x] **Step 6: Run them and watch them fail**
 
 Run: `npm test src/windows/state.test.ts`
 Expected: FAIL — cannot resolve `./state`.
 
-- [ ] **Step 7: Implement `src/windows/state.ts`**
+- [x] **Step 7: Implement `src/windows/state.ts`**
+
+The version below is what actually shipped, after a review pass ("fix round 1",
+see the note at the end of this section) hardened the first draft. The first
+draft used `export const CASCADE_SLOTS = 6` with a modulo in `cascadePosition`
+and a bare `default: return state`; both were found to be dead/unsound and
+replaced as described below.
 
 ```ts
 import { clampToViewport } from "./clampToViewport";
 import type { DesktopState, Point, WindowAction, WindowId, WindowInstance } from "./types";
 
-export const CASCADE_BASE: Point = { x: 48, y: 32 };
-export const CASCADE_STEP = 24;
-export const CASCADE_SLOTS = 6;
+const CASCADE_BASE: Point = { x: 48, y: 32 };
+const CASCADE_STEP = 24;
 
 export const initialState: DesktopState = { windows: [] };
 
@@ -1435,27 +1451,47 @@ export function focusedId(state: DesktopState): WindowId | null {
  * Placement is derived from how many windows are already open, not from the last
  * array entry: focusing reorders the array, so the last entry is not reliably the
  * most recently opened window.
+ *
+ * There are only four `WindowId` variants, so at most four windows can ever be
+ * open at once and this is never asked to place a fifth — no modulo/wraparound
+ * is needed to keep the cascade sane.
  */
 export function cascadePosition(openCount: number): Point {
-  const slot = openCount % CASCADE_SLOTS;
   return {
-    x: CASCADE_BASE.x + slot * CASCADE_STEP,
-    y: CASCADE_BASE.y + slot * CASCADE_STEP,
+    x: CASCADE_BASE.x + openCount * CASCADE_STEP,
+    y: CASCADE_BASE.y + openCount * CASCADE_STEP,
   };
 }
 
-function moveToEnd(windows: WindowInstance[], id: WindowId): WindowInstance[] {
+/**
+ * Moves a window to the end of the array. This is where the z-order trick
+ * lives: array position stands in for stacking order (see `DesktopState` and
+ * `focusedId`), which was chosen over a stored `zIndex`/`focused` field so
+ * that focus can never drift out of sync with the array it is derived from.
+ */
+function moveToEnd(windows: readonly WindowInstance[], id: WindowId): WindowInstance[] {
   const target = windows.find(w => w.id === id);
-  if (!target) return windows;
+  if (!target) return [...windows];
   return [...windows.filter(w => w.id !== id), target];
 }
 
-function update(
-  windows: WindowInstance[],
+function updateWindow(
+  windows: readonly WindowInstance[],
   id: WindowId,
   change: (instance: WindowInstance) => WindowInstance
 ): WindowInstance[] {
   return windows.map(w => (w.id === id ? change(w) : w));
+}
+
+/**
+ * Makes a window the active, visible one: un-minimises it if needed and moves
+ * it to the top of the stack. Shared by `FOCUS` and by `TOGGLE_FROM_TASKBAR`'s
+ * restore branch, so there is exactly one place that implements what
+ * "focus" means.
+ */
+function focusWindow(state: DesktopState, id: WindowId): DesktopState {
+  const restored = updateWindow(state.windows, id, w => (w.minimised ? { ...w, minimised: false } : w));
+  return { windows: moveToEnd(restored, id) };
 }
 
 export function windowReducer(state: DesktopState, action: WindowAction): DesktopState {
@@ -1479,54 +1515,126 @@ export function windowReducer(state: DesktopState, action: WindowAction): Deskto
       };
     }
 
-    case "CLOSE":
+    case "CLOSE": {
+      if (!state.windows.some(w => w.id === action.id)) return state;
       return { windows: state.windows.filter(w => w.id !== action.id) };
-
-    case "FOCUS":
-      return { windows: moveToEnd(state.windows, action.id) };
-
-    case "MINIMISE":
-      return { windows: update(state.windows, action.id, w => ({ ...w, minimised: true })) };
-
-    case "TOGGLE_FROM_TASKBAR": {
-      if (focusedId(state) === action.id) {
-        return { windows: update(state.windows, action.id, w => ({ ...w, minimised: true })) };
-      }
-      const restored = update(state.windows, action.id, w => ({ ...w, minimised: false }));
-      return { windows: moveToEnd(restored, action.id) };
     }
 
-    case "MOVE":
+    case "FOCUS": {
+      const target = state.windows.find(w => w.id === action.id);
+      if (!target) return state;
+      if (!target.minimised && focusedId(state) === action.id) return state;
+      return focusWindow(state, action.id);
+    }
+
+    case "MINIMISE": {
+      if (!state.windows.some(w => w.id === action.id)) return state;
+      return { windows: updateWindow(state.windows, action.id, w => ({ ...w, minimised: true })) };
+    }
+
+    case "TOGGLE_FROM_TASKBAR": {
+      if (!state.windows.some(w => w.id === action.id)) return state;
+      if (focusedId(state) === action.id) {
+        return { windows: updateWindow(state.windows, action.id, w => ({ ...w, minimised: true })) };
+      }
+      return focusWindow(state, action.id);
+    }
+
+    case "MOVE": {
+      if (!state.windows.some(w => w.id === action.id)) return state;
       return {
-        windows: update(state.windows, action.id, w => ({
+        windows: updateWindow(state.windows, action.id, w => ({
           ...w,
           position: clampToViewport(action.position, w.size, action.viewport),
         })),
       };
+    }
 
-    default:
-      return state;
+    default: {
+      // Exhaustiveness check: if a WindowAction variant above is ever left
+      // unhandled, `action` will not narrow to `never` here and this
+      // assignment fails to compile.
+      const exhaustive: never = action;
+      return exhaustive;
+    }
   }
 }
 ```
 
-- [ ] **Step 8: Run the tests**
+- [x] **Step 8: Run the tests**
 
 Run: `npm test src/windows`
 Expected: PASS — all of `clampToViewport.test.ts` and `state.test.ts`.
 
-- [ ] **Step 9: Verify the purity constraint**
+- [x] **Step 9: Verify the purity constraint**
 
 Run: `grep -nE "react|innerWidth|registry" src/windows/state.ts`
 Expected: no matches. If anything matches, the reducer has picked up a dependency it must not have.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git checkout -b feat/window-reducer
 git add src/windows
 git commit -m "feat: add pure window reducer with viewport clamping"
 ```
+
+- [x] **Fix round 1 (post-review hardening)**
+
+Code review found no live bugs, but flagged gaps the test suite would not have
+caught and one broken safety mechanism. Fixed on the same branch, in a second
+commit:
+
+- **Exhaustiveness checking was dead.** `default: return state` swallowed any
+  unhandled `WindowAction` variant silently. Replaced with `const exhaustive:
+  never = action; return exhaustive;`, which fails to compile if a variant is
+  ever left unhandled. Proved with a temporary seventh `MAXIMISE` variant
+  (`npm run typecheck` failed with it present, passed with it removed).
+  This also surfaced a real, independent defect: `npm run typecheck` (`tsc
+  --noEmit` against the root solution-style `tsconfig.json`, which has `files:
+  []`) silently checked zero files and always exited 0 — it had never actually
+  type-checked anything. Only `tsc -b` (used by `npm run build`) walks the
+  project references. Fixed by changing the `typecheck` script to `tsc -b
+  --noEmit`.
+- **`FOCUS` now un-minimises.** Previously `MINIMISE cv` then `FOCUS cv` left
+  `cv` last in the array (nominally topmost) while still minimised — a
+  violation of the module's own "last entry is focused" invariant. `FOCUS` on
+  a minimised window now restores it. `TOGGLE_FROM_TASKBAR`'s restore branch
+  reuses the same `focusWindow` helper rather than duplicating the logic.
+- **`OPEN`-on-an-already-open-window is now covered by tests**: re-opening
+  preserves a moved window's position and size, and `singleWindow` is
+  respected even when the target is already open. The original implementation
+  was already correct on both; only the tests were missing.
+- **No-op actions now return the identical `state` reference** rather than an
+  equal-but-new object — e.g. `FOCUS` on the window that is already focused
+  and visible, or any action naming a `WindowId` that isn't open. This matters
+  under `useReducer`: a fresh object reference re-renders the whole desktop on
+  every dispatch even when nothing changed.
+- **`DesktopState.windows` is now `readonly WindowInstance[]`**, so the
+  reducer's immutability claim is compiler-enforced, not just convention.
+- **`clampToViewport` rounds to whole pixels**, matching the pixel-crisp
+  Windows 95 aesthetic; fractional coordinates were previously passed through
+  unchanged.
+- Dead cascade-wraparound logic removed: `CASCADE_SLOTS` (originally 6) could
+  never be reached, since there are only four `WindowId` variants and thus at
+  most four windows ever open — `cascadePosition` no longer uses a modulo, and
+  a comment explains why that's safe.
+- `CASCADE_BASE`, `CASCADE_STEP` are now module-private (nothing outside
+  `state.ts` used them).
+- `update` renamed to `updateWindow`.
+- Added an immutability test that dispatches all six action types against a
+  populated state and asserts the input `DesktopState` is never mutated
+  (compared via a serialised snapshot before/after).
+- Added tests for previously-untested but already-correct behaviour: `MOVE` /
+  `MINIMISE` / `FOCUS` / `TOGGLE_FROM_TASKBAR` on an unknown/never-opened
+  `WindowId`, `CLOSE` of a minimised window, `focusedId` returning `null` when
+  every open window is minimised, `OPEN` with `singleWindow` when the target
+  is already the only window open, and a zero-size viewport.
+
+Test count grew from 23 to 37 in `src/windows` (55 across the whole suite).
+`npm run lint && npm run typecheck && npm test && npm run build` all pass, and
+the purity grep (`grep -nE "react|innerWidth|registry" src/windows/state.ts`)
+is still empty.
 
 ---
 
