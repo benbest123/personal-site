@@ -28,4 +28,8 @@ describe("clampToViewport", () => {
     const huge = { width: 2000, height: 2000 };
     expect(clampToViewport({ x: 300, y: 300 }, huge, viewport)).toEqual({ x: 0, y: 0 });
   });
+
+  it("rounds fractional coordinates to whole pixels", () => {
+    expect(clampToViewport({ x: 100.4, y: 100.6 }, size, viewport)).toEqual({ x: 100, y: 101 });
+  });
 });

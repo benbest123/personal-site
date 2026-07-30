@@ -20,8 +20,14 @@ export interface WindowInstance {
 }
 
 export interface DesktopState {
-  /** Array order is z-order: the last element is topmost. */
-  windows: WindowInstance[];
+  /**
+   * Array order is z-order: the last element is topmost and focused (see
+   * `focusedId`). There is deliberately no separate `zIndex` counter or
+   * stored "focused" field — a value derived from this array can never
+   * drift out of sync with it. `readonly` makes the reducer's immutability
+   * compiler-enforced rather than a convention callers have to trust.
+   */
+  windows: readonly WindowInstance[];
 }
 
 export type WindowAction =
