@@ -3,6 +3,8 @@
 My personal site: a Windows 95 desktop in the browser, holding my CV, my projects and
 my contact details.
 
+![The desktop, with the Projects window open](public/screenshot.png)
+
 Built with Vite, React 19, TypeScript and Tailwind v4. Window chrome comes from
 [98.css](https://jdan.github.io/98.css/); the window manager — opening, focusing,
 stacking, minimising and dragging — is a custom reducer in `src/windows/state.ts`.
