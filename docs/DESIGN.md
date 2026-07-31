@@ -37,7 +37,7 @@ the reducer, both of which are designed as extension points.
 | Decision | Choice | Reason |
 |---|---|---|
 | v1 scope | Desktop + CV + Projects, frontend only | Ships in days and is genuinely applicable-ready. Only Spotify forces backend, secrets and caching questions, so all of those defer with it. |
-| Hosting | Deferred | v1 is a pure static build with no host-specific code, so the choice can be made in the Spotify design instead of guessed at now. |
+| Hosting | Vercel, at `benbest.uk` | Taken after v1 shipped, once the build had proved host-agnostic. Vercel auto-detects Vite, so the decision cost no config: no `vercel.json`, no environment variables. It stays reversible — any static host serves `dist/` — and a Spotify proxy later has somewhere to run. |
 | CV content source | Hand-copied typed TS module | Zero coupling to the `cv` repo, fully typed, and allows web prose rather than ATS prose. The cost is a manual edit once or twice a year. |
 | Window chrome | Own window manager + 98.css | The state logic stays custom and testable; the fiddly pixel work (title bars, scrollbars, tabs) comes from ~10KB of plain CSS with no JS and no styling-system conflict with Tailwind. |
 | Mobile | Windows maximise, drag disabled | One responsive branch, same components, same reducer. The Win95 concept survives on a phone instead of being replaced by a second UI. |
