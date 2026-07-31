@@ -20,6 +20,14 @@ describe("profile", () => {
   it("states full right to work", () => {
     expect(profile.summary).toContain("full right to work");
   });
+
+  it("says he is available and open to both data and software engineering roles", () => {
+    // The whole point of the site is job applications, so these three claims are the ones
+    // a well-meaning edit must not quietly drop.
+    expect(profile.availability.length).toBeGreaterThan(0);
+    expect(profile.summary).toContain("data engineering");
+    expect(profile.summary).toContain("software engineering");
+  });
 });
 
 describe("projects", () => {

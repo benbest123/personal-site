@@ -51,6 +51,33 @@ body {
   background: rgb(255 255 255 / 0.25);
 }
 
+/* A raised Win95 panel used as a status chip on the desktop. 98.css has no chip
+   component, so this borrows its border and surface custom properties rather than
+   re-deriving the bevel by hand. Unlayered, like `.desktop-icon` above, so `color` beats
+   the inherited `text-white` on the surrounding block — the chip's face is light grey. */
+.desktop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 4px 10px;
+  background: var(--surface);
+  color: var(--text-color);
+  box-shadow: var(--border-raised-outer), var(--border-raised-inner);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* The indicator light. A pseudo-element because it is decoration: the chip's own text
+   already says "available for work", and a screen reader should not announce it twice. */
+.desktop-chip::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: #00a000;
+  box-shadow: var(--border-sunken-outer);
+}
+
 /* 98.css sets `outline: none` on title-bar buttons (Minimize/Close) with no replacement,
    leaving keyboard users with no visible focus indicator on otherwise-reachable,
    correctly-named controls. Same fix as `.desktop-icon:focus-visible` above. */

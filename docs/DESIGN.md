@@ -228,7 +228,15 @@ turns up. Its history is not cloned — it carries a todo app, auth code, and a 
 **verbatim**: those bullets are governed by that repo's verified-facts process, and only
 Ben can approve a deviation. Shortening them for the web is a deliberate follow-up he signs
 off separately, not something to do in passing during transcription. The phone number is
-omitted. `profile.ts` carries name, summary, email, LinkedIn and GitHub only.
+omitted. `profile.ts` carries name, headline, availability, summary, email, LinkedIn and
+GitHub only.
+
+`profile.summary` and `profile.availability` are the one piece of content authored for this
+site rather than transcribed: they state that Ben is available, that he is looking for data
+engineering roles, and that the more software-focused final stretch of the Visa role has
+him open to software engineering ones too. That last claim is his own framing of his
+experience, not an inference drawn from the CV, and is his to change. `content.test.ts`
+guards all three so an edit cannot quietly drop one.
 
 `public/Benjamin_Best_CV.pdf` is the existing master build from the `cv` repo, phone
 number included. It is refreshed by copying the file across after a rebuild there. This is
@@ -282,8 +290,9 @@ defensible; no project claims a deployment it does not have.
 
 ## 6. Presentation, responsiveness and accessibility
 
-The desktop is `#008080` teal, with icons in a left-hand column and the name plus
-one-paragraph summary set as large text on the background, centred in the desktop area
+The desktop is `#008080` teal, with icons in a left-hand column and an "Available for
+work" chip, the name and a one-paragraph summary set as large text on the background,
+centred in the desktop area
 (bottom-centred below `md`, where centring it vertically would collide with the icon
 column). Windows cascade in from `x: 144` so they open clear of that column. The taskbar
 is pinned to the bottom with one button per open window — pressed-in when focused — and a

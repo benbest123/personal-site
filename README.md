@@ -11,7 +11,8 @@ stacking, minimising and dragging — is a custom reducer in `src/windows/state.
 
 A teal desktop with three draggable, focusable windows — CV, Projects and
 Contact — opened from desktop icons, tracked in a taskbar with a clock, and minimisable
-back to that taskbar. Below 768px, windows go full-screen and only one is open at a
+back to that taskbar. Centred on the background: an "Available for work" chip, my name
+and a short summary. Below 768px, windows go full-screen and only one is open at a
 time. The CV is readable inline and downloadable as a PDF. Everything is a static
 build: no backend, no router, no data fetching.
 

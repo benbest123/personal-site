@@ -10,8 +10,9 @@ describe("Desktop", () => {
     window.innerHeight = 900;
   });
 
-  it("shows the name and summary without any interaction", () => {
+  it("shows the availability chip, name and summary without any interaction", () => {
     render(<App />);
+    expect(screen.getByText(profile.availability)).toBeInTheDocument();
     expect(screen.getByText(profile.name)).toBeInTheDocument();
     expect(screen.getByText(profile.summary)).toBeInTheDocument();
   });

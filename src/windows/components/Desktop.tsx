@@ -48,6 +48,8 @@ export default function Desktop() {
           inert={hiddenBehindMobileWindow}
         >
           <div className="max-w-md text-center text-white md:max-w-lg">
+            {/* `.desktop-chip` is unlayered CSS in index.css — see the cascade note there. */}
+            <p className="desktop-chip mb-3">{profile.availability}</p>
             <h1 className="mb-2 text-4xl font-bold">{profile.name}</h1>
             <p className="mb-2 text-sm">{profile.headline}</p>
             <p className="text-sm leading-snug">{profile.summary}</p>
