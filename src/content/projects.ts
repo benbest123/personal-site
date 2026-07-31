@@ -54,7 +54,7 @@ export const projects: Project[] = [
   },
   {
     name: "This site",
-    status: "local",
+    status: "live",
     stack: ["React", "TypeScript", "Vite", "Tailwind", "98.css"],
     blurb:
       "A Windows 95 desktop in the browser: a custom window manager with draggable, " +
@@ -63,5 +63,6 @@ export const projects: Project[] = [
       "To have somewhere to put my CV that is more memorable than a PDF, and because a " +
       "window manager is a genuinely interesting bit of state modelling.",
     repoUrl: "https://github.com/benbest123/personal-site",
+    liveUrl: "https://benbest.uk",
   },
 ];
