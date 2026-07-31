@@ -25,7 +25,14 @@ textarea,
 body {
   margin: 0;
   overflow: hidden; /* the desktop owns the viewport; windows scroll internally */
+  /* Win95 cursors, drawn 1:1 from a pixel grid — see src/cursor/arrow.svg. These live in
+     src/ rather than public/ so the bundler resolves and hashes them, which turns a
+     mistyped path into a build error instead of a silently missing cursor. The keyword
+     after each url() is the fallback for anything that will not load an SVG cursor. The
+     numbers are the hotspot: the arrow's tip, the hand's fingertip. */
+  cursor: url("./cursor/arrow.svg") 0 0, default;
 }
+
 
 /* A desktop icon is a <button> for keyboard and screen-reader users, but it is not
    chrome — undo 98.css's button styling rather than trying to out-specify it. */
@@ -42,13 +49,51 @@ body {
   background: transparent;
   color: #fff;
   font-family: inherit;
-  cursor: pointer;
+}
+
+/* Must come after `.desktop-icon`: that selector is also (0,1,0), so at equal specificity
+   the later rule is the one that applies. Unlayered for the same reason as the rest of
+   this file — a Tailwind utility could not override 98.css's own `cursor: pointer`. */
+a,
+button,
+label,
+summary,
+[role="button"],
+.desktop-icon {
+  cursor: url("./cursor/hand.svg") 4 0, pointer;
 }
 
 .desktop-icon:focus-visible {
   outline: 1px dotted #fff;
   outline-offset: -2px;
   background: rgb(255 255 255 / 0.25);
+}
+
+/* A raised Win95 panel used as a status chip on the desktop. 98.css has no chip
+   component, so this borrows its border and surface custom properties rather than
+   re-deriving the bevel by hand. Unlayered, like `.desktop-icon` above, so `color` beats
+   the inherited `text-white` on the surrounding block — the chip's face is light grey. */
+.desktop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 4px 10px;
+  background: var(--surface);
+  color: var(--text-color);
+  box-shadow: var(--border-raised-outer), var(--border-raised-inner);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* The indicator light. A pseudo-element because it is decoration: the chip's own text
+   already says "available for work", and a screen reader should not announce it twice. */
+.desktop-chip::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: #00a000;
+  box-shadow: var(--border-sunken-outer);
 }
 
 /* 98.css sets `outline: none` on title-bar buttons (Minimize/Close) with no replacement,

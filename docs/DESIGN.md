@@ -39,10 +39,10 @@ the reducer, both of which are designed as extension points.
 | v1 scope | Desktop + CV + Projects, frontend only | Ships in days and is genuinely applicable-ready. Only Spotify forces backend, secrets and caching questions, so all of those defer with it. |
 | Hosting | Deferred | v1 is a pure static build with no host-specific code, so the choice can be made in the Spotify design instead of guessed at now. |
 | CV content source | Hand-copied typed TS module | Zero coupling to the `cv` repo, fully typed, and allows web prose rather than ATS prose. The cost is a manual edit once or twice a year. |
-| Window chrome | Own window manager + 98.css | The state logic stays hand-written and testable; the fiddly pixel work (title bars, scrollbars, tabs) comes from ~10KB of plain CSS with no JS and no styling-system conflict with Tailwind. |
+| Window chrome | Own window manager + 98.css | The state logic stays custom and testable; the fiddly pixel work (title bars, scrollbars, tabs) comes from ~10KB of plain CSS with no JS and no styling-system conflict with Tailwind. |
 | Mobile | Windows maximise, drag disabled | One responsive branch, same components, same reducer. The Win95 concept survives on a phone instead of being replaced by a second UI. |
 | Repo layout | Fresh repo, flat Vite app, single repo | See §7. |
-| First load | Name and summary on the desktop background | Chosen over an auto-opening Welcome dialog, which may be added later. |
+| First load | Name and summary centred on the desktop background | Chosen over an auto-opening Welcome dialog, which may be added later. There is no About window: it would only repeat this text. |
 | Contact details | Email, LinkedIn, GitHub on the page; no phone on the page | The PDF remains the existing master build with the phone number included, accepted as a known trade-off. |
 | Project framing | Factual `status` chip plus a "Why I built it" line on every card | See §5. |
 
@@ -63,8 +63,8 @@ rendering anything, and where the majority of the test suite points.
 that draws chrome and binds drag; a `WindowLayer` rendering open windows in order; plus
 `Desktop`, `DesktopIcon` and `Taskbar`.
 
-**`src/apps/` — window contents.** `CvWindow`, `ProjectsWindow`, `AboutWindow`,
-`ContactWindow`. Ordinary presentational components reading from `src/content/`. They
+**`src/apps/` — window contents.** `CvWindow`, `ProjectsWindow`, `ContactWindow`.
+Ordinary presentational components reading from `src/content/`. They
 know nothing about windowing, so they can be tested by rendering them directly.
 
 ### The registry is the extension point
@@ -73,7 +73,7 @@ know nothing about windowing, so they can be tested by rendering them directly.
 // src/windows/registry.ts
 export const REGISTRY: Record<WindowId, WindowDef> = {
   cv: {
-    title: "Benjamin_Best_CV",
+    title: "My CV",
     icon: cvIcon,
     component: CvWindow,
     defaultSize: { width: 720, height: 560 },
@@ -88,7 +88,7 @@ what keeps Spotify and the scrum board from becoming invasive later.
 ### State model
 
 ```ts
-type WindowId = "cv" | "projects" | "about" | "contact";
+type WindowId = "cv" | "projects" | "contact";
 
 interface WindowInstance {
   id: WindowId;
@@ -209,7 +209,6 @@ personal-site/
     └── apps/
         ├── CvWindow.tsx
         ├── ProjectsWindow.tsx
-        ├── AboutWindow.tsx
         └── ContactWindow.tsx
 ```
 
@@ -229,7 +228,15 @@ turns up. Its history is not cloned — it carries a todo app, auth code, and a 
 **verbatim**: those bullets are governed by that repo's verified-facts process, and only
 Ben can approve a deviation. Shortening them for the web is a deliberate follow-up he signs
 off separately, not something to do in passing during transcription. The phone number is
-omitted. `profile.ts` carries name, summary, email, LinkedIn and GitHub only.
+omitted. `profile.ts` carries name, headline, availability, summary, email, LinkedIn and
+GitHub only.
+
+`profile.summary` and `profile.availability` are the one piece of content authored for this
+site rather than transcribed: they state that Ben is available, that he is looking for data
+engineering roles, and that the more software-focused final stretch of the Visa role has
+him open to software engineering ones too. That last claim is his own framing of his
+experience, not an inference drawn from the CV, and is his to change. `content.test.ts`
+guards all three so an edit cannot quietly drop one.
 
 `public/Benjamin_Best_CV.pdf` is the existing master build from the `cv` repo, phone
 number included. It is refreshed by copying the file across after a rebuild there. This is
@@ -283,9 +290,44 @@ defensible; no project claims a deployment it does not have.
 
 ## 6. Presentation, responsiveness and accessibility
 
-The desktop is `#008080` teal, with icons in a left-hand column and the name plus
-one-paragraph summary set as large text on the background. The taskbar is pinned to the
-bottom with one button per open window — pressed-in when focused — and a clock.
+The desktop is `#008080` teal, with icons in a left-hand column and an "Available for
+work" chip, the name and a one-paragraph summary set as large text on the background,
+centred in the desktop area
+(bottom-centred below `md`, where centring it vertically would collide with the icon
+column). Windows cascade in from `x: 144` so they open clear of that column. The taskbar
+is pinned to the bottom with one button per open window — pressed-in when focused — and a
+clock.
+
+### Cursors and the pointer trail
+
+The arrow and pointing-hand cursors are Win95 pixel art, generated from an ASCII grid that
+is kept inside each SVG as a comment so the committed file can be checked against a
+screenshot without rerunning anything. They are drawn 1:1 (12×18 and 12×15) rather than
+scaled up: browsers only reliably honour custom cursors up to 32×32, and scaling pixel art
+by a non-integer factor produces uneven rows. Every `url()` is followed by a keyword
+fallback, because a browser that will not load an SVG cursor fails silently to no cursor
+rule at all.
+
+They live in `src/cursor/`, not `public/`. A `public/` asset is referenced by a string path
+that nothing checks, so a typo ships as a missing cursor nobody notices; from `src/` the
+bundler resolves and hashes both the CSS `url()` and the `import` in `PointerTrail`, and a
+wrong path is a build error. `cursors.test.ts` covers what the bundler still cannot: that
+the ghost size constants match the SVG, and that the hand's hotspot is on its fingertip.
+
+The trail is Windows 95's own "Show pointer trails" (Control Panel → Mouse → Motion):
+ghost copies of the arrow lagging behind it. It reuses `arrow.svg`, so there is one piece
+of art rather than two that can drift apart.
+
+Two things it deliberately does not do. It does not animate under
+`prefers-reduced-motion: reduce` — it renders nothing at all, rather than rendering
+something hidden that keeps a `requestAnimationFrame` loop alive. And it ignores any
+pointer that is not a mouse, which is what keeps a phone from stranding five arrows
+wherever a finger last lifted.
+
+The ghosts are positioned by writing `transform` directly to the DOM inside the animation
+frame, not by React state: state would re-render the tree on every mouse move. They are a
+chain — each ghost eases toward the one in front — rather than a recording of past
+positions, which bunches into a single blob whenever the pointer stops.
 
 98.css supplies window frames, title bars, scrollbars, tabs and form controls. Tailwind
 handles layout. W95FA remains the body font, overriding 98.css's bundled `ms_sans_serif`.

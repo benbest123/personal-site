@@ -1,7 +1,13 @@
 import { clampToViewport } from "./clampToViewport";
 import type { DesktopState, Point, WindowAction, WindowId, WindowInstance } from "./types";
 
-const CASCADE_BASE: Point = { x: 48, y: 32 };
+/**
+ * `x` clears the desktop icon column so a newly opened window does not land on
+ * top of the icons. The column ends 112px from the left edge: a `p-4` (16px)
+ * container around `.desktop-icon`, which is 6rem wide (see `Desktop.tsx` and
+ * `index.css`). `state.test.ts` guards the relationship.
+ */
+const CASCADE_BASE: Point = { x: 144, y: 32 };
 const CASCADE_STEP = 24;
 
 export const initialState: DesktopState = { windows: [] };
@@ -19,8 +25,8 @@ export function focusedId(state: DesktopState): WindowId | null {
  * array entry: focusing reorders the array, so the last entry is not reliably the
  * most recently opened window.
  *
- * There are only four `WindowId` variants, so at most four windows can ever be
- * open at once and this is never asked to place a fifth — no modulo/wraparound
+ * There are only three `WindowId` variants, so at most three windows can ever be
+ * open at once and this is never asked to place a fourth — no modulo/wraparound
  * is needed to keep the cascade sane.
  */
 export function cascadePosition(openCount: number): Point {

@@ -6,6 +6,8 @@ export interface Link {
 export interface Profile {
   name: string;
   headline: string;
+  /** Short status shown as a chip on the desktop, above the name. */
+  availability: string;
   summary: string;
   location: string;
   email: string;

@@ -5,14 +5,16 @@ my contact details.
 
 Built with Vite, React 19, TypeScript and Tailwind v4. Window chrome comes from
 [98.css](https://jdan.github.io/98.css/); the window manager — opening, focusing,
-stacking, minimising and dragging — is a hand-written reducer in `src/windows/state.ts`.
+stacking, minimising and dragging — is a custom reducer in `src/windows/state.ts`.
 
 ## What's here
 
-A teal desktop with four draggable, focusable windows — About Me, CV, Projects and
+A teal desktop with three draggable, focusable windows — CV, Projects and
 Contact — opened from desktop icons, tracked in a taskbar with a clock, and minimisable
-back to that taskbar. Below 768px, windows go full-screen and only one is open at a
-time. The CV is readable inline and downloadable as a PDF. Everything is a static
+back to that taskbar. Centred on the background: an "Available for work" chip, my name
+and a short summary. The cursor is Win95 pixel art with a Windows 95 "pointer trail"
+behind it, which switches itself off under `prefers-reduced-motion`. Below 768px, windows
+go full-screen and only one is open at a time. The CV is readable inline and downloadable as a PDF. Everything is a static
 build: no backend, no router, no data fetching.
 
 **Hosting is not yet chosen.** v1 is a plain static build with no host-specific code, so
@@ -34,7 +36,7 @@ npm run dev
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run test:coverage` | Run tests with a coverage report |
 | `npm run lint` | ESLint |
-| `npm run typecheck` | `tsc --noEmit` |
+| `npm run typecheck` | `tsc -b --noEmit` |
 
 ## Design
 

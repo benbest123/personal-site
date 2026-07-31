@@ -41,12 +41,19 @@ export default function Desktop() {
           data-testid="desktop-summary"
           // pointer-events-none keeps this decorative block from swallowing clicks meant
           // for a window rendered beneath it (see WindowLayer, which is a sibling below).
-          className="pointer-events-none absolute bottom-8 right-8 max-w-md text-right text-white md:max-w-lg"
+          // `items-end` until `md` keeps the text at the bottom on narrow screens, where a
+          // vertically centred block would run into the icon column above it; from `md` up
+          // there is room to centre it properly.
+          className="pointer-events-none absolute inset-0 flex items-end justify-center p-8 md:items-center"
           inert={hiddenBehindMobileWindow}
         >
-          <h1 className="mb-2 text-4xl font-bold">{profile.name}</h1>
-          <p className="mb-2 text-sm">{profile.headline}</p>
-          <p className="text-sm leading-snug">{profile.summary}</p>
+          <div className="max-w-md text-center text-white md:max-w-lg">
+            {/* `.desktop-chip` is unlayered CSS in index.css — see the cascade note there. */}
+            <p className="desktop-chip mb-3">{profile.availability}</p>
+            <h1 className="mb-2 text-4xl font-bold">{profile.name}</h1>
+            <p className="mb-2 text-sm">{profile.headline}</p>
+            <p className="text-sm leading-snug">{profile.summary}</p>
+          </div>
         </div>
 
         <WindowLayer />

@@ -31,6 +31,14 @@ describe("OPEN", () => {
     expect(focusedId(state)).toBe("cv");
   });
 
+  it("opens the first window clear of the desktop icon column", () => {
+    // The icon column ends 112px from the left edge: a `p-4` (16px) container in
+    // Desktop.tsx wrapping `.desktop-icon`, which index.css sizes at 6rem. A window
+    // starting left of that opens on top of the icons.
+    const ICON_COLUMN_RIGHT_EDGE = 112;
+    expect(cascadePosition(0).x).toBeGreaterThanOrEqual(ICON_COLUMN_RIGHT_EDGE);
+  });
+
   it("cascades a second window instead of stacking it exactly", () => {
     const state = open(open(initialState, "cv"), "projects");
     expect(state.windows[1].position).not.toEqual(state.windows[0].position);
@@ -39,15 +47,15 @@ describe("OPEN", () => {
   it("places by open count, so focusing does not change where the next window lands", () => {
     let state = open(open(initialState, "cv"), "projects");
     state = windowReducer(state, { type: "FOCUS", id: "cv" });
-    state = open(state, "about");
-    const about = state.windows.find(w => w.id === "about")!;
-    expect(about.position).toEqual(cascadePosition(2));
+    state = open(state, "contact");
+    const contact = state.windows.find(w => w.id === "contact")!;
+    expect(contact.position).toEqual(cascadePosition(2));
   });
 
   it("drops every other window when singleWindow is set", () => {
     let state = open(open(initialState, "cv"), "projects");
-    state = open(state, "about", true);
-    expect(ids(state)).toEqual(["about"]);
+    state = open(state, "contact", true);
+    expect(ids(state)).toEqual(["contact"]);
   });
 
   it("clamps the cascade position into a short viewport", () => {
@@ -123,7 +131,7 @@ describe("CLOSE", () => {
 
   it("does nothing for a window that is not open", () => {
     const state = open(initialState, "cv");
-    expect(windowReducer(state, { type: "CLOSE", id: "about" })).toBe(state);
+    expect(windowReducer(state, { type: "CLOSE", id: "contact" })).toBe(state);
   });
 });
 
@@ -149,7 +157,7 @@ describe("FOCUS", () => {
 
   it("does nothing for a window that is not open", () => {
     const state = open(initialState, "cv");
-    expect(windowReducer(state, { type: "FOCUS", id: "about" })).toBe(state);
+    expect(windowReducer(state, { type: "FOCUS", id: "contact" })).toBe(state);
   });
 });
 
@@ -175,7 +183,7 @@ describe("MINIMISE", () => {
 
   it("does nothing for a window that is not open", () => {
     const state = open(initialState, "cv");
-    expect(windowReducer(state, { type: "MINIMISE", id: "about" })).toBe(state);
+    expect(windowReducer(state, { type: "MINIMISE", id: "contact" })).toBe(state);
   });
 });
 
@@ -203,7 +211,7 @@ describe("TOGGLE_FROM_TASKBAR", () => {
 
   it("does nothing for a window that has never been opened", () => {
     const state = open(initialState, "cv");
-    expect(windowReducer(state, { type: "TOGGLE_FROM_TASKBAR", id: "about" })).toBe(state);
+    expect(windowReducer(state, { type: "TOGGLE_FROM_TASKBAR", id: "contact" })).toBe(state);
   });
 });
 
@@ -228,7 +236,7 @@ describe("MOVE", () => {
   it("does nothing for a window that is not open", () => {
     const state = open(initialState, "cv");
     expect(
-      windowReducer(state, { type: "MOVE", id: "about", position: { x: 10, y: 10 }, viewport })
+      windowReducer(state, { type: "MOVE", id: "contact", position: { x: 10, y: 10 }, viewport })
     ).toBe(state);
   });
 });
@@ -248,7 +256,7 @@ describe("immutability", () => {
     seed = windowReducer(seed, { type: "MINIMISE", id: "projects" });
 
     const actions: WindowAction[] = [
-      { type: "OPEN", id: "about", size, viewport, singleWindow: false },
+      { type: "OPEN", id: "contact", size, viewport, singleWindow: false },
       { type: "MOVE", id: "cv", position: { x: 10, y: 10 }, viewport },
       { type: "CLOSE", id: "cv" },
       { type: "FOCUS", id: "projects" },
