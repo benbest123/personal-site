@@ -298,6 +298,37 @@ column). Windows cascade in from `x: 144` so they open clear of that column. The
 is pinned to the bottom with one button per open window — pressed-in when focused — and a
 clock.
 
+### Cursors and the pointer trail
+
+The arrow and pointing-hand cursors are Win95 pixel art, generated from an ASCII grid that
+is kept inside each SVG as a comment so the committed file can be checked against a
+screenshot without rerunning anything. They are drawn 1:1 (12×18 and 12×15) rather than
+scaled up: browsers only reliably honour custom cursors up to 32×32, and scaling pixel art
+by a non-integer factor produces uneven rows. Every `url()` is followed by a keyword
+fallback, because a browser that will not load an SVG cursor fails silently to no cursor
+rule at all.
+
+They live in `src/cursor/`, not `public/`. A `public/` asset is referenced by a string path
+that nothing checks, so a typo ships as a missing cursor nobody notices; from `src/` the
+bundler resolves and hashes both the CSS `url()` and the `import` in `PointerTrail`, and a
+wrong path is a build error. `cursors.test.ts` covers what the bundler still cannot: that
+the ghost size constants match the SVG, and that the hand's hotspot is on its fingertip.
+
+The trail is Windows 95's own "Show pointer trails" (Control Panel → Mouse → Motion):
+ghost copies of the arrow lagging behind it. It reuses `arrow.svg`, so there is one piece
+of art rather than two that can drift apart.
+
+Two things it deliberately does not do. It does not animate under
+`prefers-reduced-motion: reduce` — it renders nothing at all, rather than rendering
+something hidden that keeps a `requestAnimationFrame` loop alive. And it ignores any
+pointer that is not a mouse, which is what keeps a phone from stranding five arrows
+wherever a finger last lifted.
+
+The ghosts are positioned by writing `transform` directly to the DOM inside the animation
+frame, not by React state: state would re-render the tree on every mouse move. They are a
+chain — each ghost eases toward the one in front — rather than a recording of past
+positions, which bunches into a single blob whenever the pointer stops.
+
 98.css supplies window frames, title bars, scrollbars, tabs and form controls. Tailwind
 handles layout. W95FA remains the body font, overriding 98.css's bundled `ms_sans_serif`.
 98.css is the single source of chrome; the `shadow-w95*` utilities are ported only where

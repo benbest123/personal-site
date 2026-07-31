@@ -7,9 +7,10 @@
 > **Amended after v1 shipped.** The task bodies below still describe the site as built at
 > the end of Task 10. Since then: the About window was removed (it only repeated the name
 > and summary already shown on the desktop), the CV window and icon were retitled "My CV",
-> windows now cascade in clear of the icon column, and the desktop name/summary block is
-> centred rather than pinned to a corner. `docs/DESIGN.md` and the code are the current
-> record; this plan is kept as the build history.
+> windows now cascade in clear of the icon column, the desktop name/summary block is
+> centred rather than pinned to a corner and carries an availability chip, and the site
+> has Win95 cursors with a pointer trail (`src/cursor/`). `docs/DESIGN.md` and the code
+> are the current record; this plan is kept as the build history.
 
 **Architecture:** A single static React SPA with no backend, no router and no data fetching. A pure reducer in `src/windows/state.ts` owns all window behaviour; a React shell renders it; presentational "app" components read from typed content modules. Adding a window later is one registry entry plus one component.
 
