@@ -17,9 +17,17 @@ behind it, which switches itself off under `prefers-reduced-motion`. Below 768px
 go full-screen and only one is open at a time. The CV is readable inline and downloadable as a PDF. Everything is a static
 build: no backend, no router, no data fetching.
 
-**Hosting is not yet chosen.** v1 is a plain static build with no host-specific code, so
-picking a target (and adding a deploy workflow) is deliberately deferred — see
-`docs/DESIGN.md` and the "Follow-ups" section of `PLAN.md`.
+## Hosting
+
+Live at [benbest.uk](https://benbest.uk), on Vercel. The build stays host-agnostic: Vercel
+auto-detects the Vite preset, so there is no `vercel.json`, no build overrides and no
+environment variables — `npm run build` into `dist/` is the whole contract. Pushes to
+`main` deploy; pull requests get preview URLs.
+
+The domain is registered with Cloudflare, which also serves its DNS. Both records are
+**"DNS only" (grey cloud), not proxied** — Vercel validates the certificate over HTTP, and
+Cloudflare's proxy intercepts that, so proxying breaks certificate issuance. Cloudflare's
+SSL/TLS mode is Full (strict).
 
 ## Running it
 
