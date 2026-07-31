@@ -1,5 +1,4 @@
 import type { ComponentType } from "react";
-import AboutWindow from "../apps/AboutWindow";
 import ContactWindow from "../apps/ContactWindow";
 import CvWindow from "../apps/CvWindow";
 import ProjectsWindow from "../apps/ProjectsWindow";
@@ -13,14 +12,8 @@ export interface WindowDef {
 }
 
 export const REGISTRY: Record<WindowId, WindowDef> = {
-  about: {
-    title: "About Me",
-    icon: "👤",
-    component: AboutWindow,
-    defaultSize: { width: 460, height: 340 },
-  },
   cv: {
-    title: "Benjamin_Best_CV",
+    title: "My CV",
     icon: "📄",
     component: CvWindow,
     defaultSize: { width: 720, height: 560 },
@@ -40,4 +33,4 @@ export const REGISTRY: Record<WindowId, WindowDef> = {
 };
 
 /** Order the icons appear down the left of the desktop. */
-export const DESKTOP_ORDER: WindowId[] = ["about", "cv", "projects", "contact"];
+export const DESKTOP_ORDER: WindowId[] = ["cv", "projects", "contact"];

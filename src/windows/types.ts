@@ -1,4 +1,4 @@
-export type WindowId = "about" | "cv" | "projects" | "contact";
+export type WindowId = "cv" | "projects" | "contact";
 
 export interface Point {
   x: number;
