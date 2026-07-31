@@ -24,6 +24,14 @@ describe("Desktop", () => {
     }
   });
 
+  it("labels the CV icon and its window 'My CV'", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const desktop = screen.getByRole("main");
+    await user.click(within(desktop).getByRole("button", { name: "My CV" }));
+    expect(screen.getByRole("dialog", { name: "My CV" })).toBeInTheDocument();
+  });
+
   it("opens a window when its icon is clicked", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -121,9 +129,9 @@ describe("Desktop", () => {
 
   it("keeps the name and summary block non-interactive so it does not swallow clicks meant for windows beneath it", () => {
     render(<App />);
-    // pointer-events-none is what lets a click landing on this block's footprint (bottom
-    // right of the desktop) pass through to a window rendered underneath instead of
-    // hitting this decorative text.
+    // This block is stretched over the whole desktop (`absolute inset-0`) so its text can
+    // be centred in it, which puts it on top of both the icon column and any open window.
+    // pointer-events-none is the only thing letting clicks through to them.
     expect(screen.getByTestId("desktop-summary")).toHaveClass("pointer-events-none");
   });
 
