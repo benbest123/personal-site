@@ -40,7 +40,7 @@ describe("Window", () => {
     const user = userEvent.setup();
     renderDesktop();
     await user.click(screen.getByText("open cv"));
-    expect(screen.getByRole("dialog", { name: "Benjamin_Best_CV" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "My CV" })).toBeInTheDocument();
   });
 
   it("closes when the close control is clicked", async () => {
@@ -80,7 +80,7 @@ describe("Window", () => {
     // projects was opened last, so it is focused; only it should close.
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "Projects" })).not.toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "Benjamin_Best_CV" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "My CV" })).toBeInTheDocument();
   });
 
   it("stacks the most recently opened window on top", async () => {
@@ -89,7 +89,7 @@ describe("Window", () => {
     await user.click(screen.getByText("open cv"));
     await user.click(screen.getByText("open projects"));
     const cvZIndex = Number(
-      getComputedStyle(screen.getByRole("dialog", { name: "Benjamin_Best_CV" })).zIndex
+      getComputedStyle(screen.getByRole("dialog", { name: "My CV" })).zIndex
     );
     const projectsZIndex = Number(
       getComputedStyle(screen.getByRole("dialog", { name: "Projects" })).zIndex
@@ -111,12 +111,12 @@ describe("Window", () => {
     const namesBefore = screen.getAllByRole("dialog").map(d => d.getAttribute("aria-label"));
 
     // projects opened last, so it is focused; clicking cv brings the background window forward.
-    await user.click(screen.getByRole("dialog", { name: "Benjamin_Best_CV" }));
+    await user.click(screen.getByRole("dialog", { name: "My CV" }));
     const namesAfter = screen.getAllByRole("dialog").map(d => d.getAttribute("aria-label"));
 
     expect(namesAfter).toEqual(namesBefore);
     const cvZIndex = Number(
-      getComputedStyle(screen.getByRole("dialog", { name: "Benjamin_Best_CV" })).zIndex
+      getComputedStyle(screen.getByRole("dialog", { name: "My CV" })).zIndex
     );
     const projectsZIndex = Number(
       getComputedStyle(screen.getByRole("dialog", { name: "Projects" })).zIndex
@@ -131,7 +131,7 @@ describe("Window", () => {
     await user.click(screen.getByText("open projects"));
 
     const cvTitleBar = screen
-      .getByRole("dialog", { name: "Benjamin_Best_CV" })
+      .getByRole("dialog", { name: "My CV" })
       .querySelector(".title-bar");
     const projectsTitleBar = screen
       .getByRole("dialog", { name: "Projects" })

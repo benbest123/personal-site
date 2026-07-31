@@ -57,7 +57,7 @@ export const projects: Project[] = [
     status: "local",
     stack: ["React", "TypeScript", "Vite", "Tailwind", "98.css"],
     blurb:
-      "A Windows 95 desktop in the browser: a hand-written window manager with draggable, " +
+      "A Windows 95 desktop in the browser: a custom window manager with draggable, " +
       "focusable, minimisable windows built on a pure reducer.",
     why:
       "To have somewhere to put my CV that is more memorable than a PDF, and because a " +

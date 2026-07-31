@@ -39,10 +39,10 @@ the reducer, both of which are designed as extension points.
 | v1 scope | Desktop + CV + Projects, frontend only | Ships in days and is genuinely applicable-ready. Only Spotify forces backend, secrets and caching questions, so all of those defer with it. |
 | Hosting | Deferred | v1 is a pure static build with no host-specific code, so the choice can be made in the Spotify design instead of guessed at now. |
 | CV content source | Hand-copied typed TS module | Zero coupling to the `cv` repo, fully typed, and allows web prose rather than ATS prose. The cost is a manual edit once or twice a year. |
-| Window chrome | Own window manager + 98.css | The state logic stays hand-written and testable; the fiddly pixel work (title bars, scrollbars, tabs) comes from ~10KB of plain CSS with no JS and no styling-system conflict with Tailwind. |
+| Window chrome | Own window manager + 98.css | The state logic stays custom and testable; the fiddly pixel work (title bars, scrollbars, tabs) comes from ~10KB of plain CSS with no JS and no styling-system conflict with Tailwind. |
 | Mobile | Windows maximise, drag disabled | One responsive branch, same components, same reducer. The Win95 concept survives on a phone instead of being replaced by a second UI. |
 | Repo layout | Fresh repo, flat Vite app, single repo | See §7. |
-| First load | Name and summary on the desktop background | Chosen over an auto-opening Welcome dialog, which may be added later. |
+| First load | Name and summary centred on the desktop background | Chosen over an auto-opening Welcome dialog, which may be added later. There is no About window: it would only repeat this text. |
 | Contact details | Email, LinkedIn, GitHub on the page; no phone on the page | The PDF remains the existing master build with the phone number included, accepted as a known trade-off. |
 | Project framing | Factual `status` chip plus a "Why I built it" line on every card | See §5. |
 
@@ -63,8 +63,8 @@ rendering anything, and where the majority of the test suite points.
 that draws chrome and binds drag; a `WindowLayer` rendering open windows in order; plus
 `Desktop`, `DesktopIcon` and `Taskbar`.
 
-**`src/apps/` — window contents.** `CvWindow`, `ProjectsWindow`, `AboutWindow`,
-`ContactWindow`. Ordinary presentational components reading from `src/content/`. They
+**`src/apps/` — window contents.** `CvWindow`, `ProjectsWindow`, `ContactWindow`.
+Ordinary presentational components reading from `src/content/`. They
 know nothing about windowing, so they can be tested by rendering them directly.
 
 ### The registry is the extension point
@@ -73,7 +73,7 @@ know nothing about windowing, so they can be tested by rendering them directly.
 // src/windows/registry.ts
 export const REGISTRY: Record<WindowId, WindowDef> = {
   cv: {
-    title: "Benjamin_Best_CV",
+    title: "My CV",
     icon: cvIcon,
     component: CvWindow,
     defaultSize: { width: 720, height: 560 },
@@ -88,7 +88,7 @@ what keeps Spotify and the scrum board from becoming invasive later.
 ### State model
 
 ```ts
-type WindowId = "cv" | "projects" | "about" | "contact";
+type WindowId = "cv" | "projects" | "contact";
 
 interface WindowInstance {
   id: WindowId;
@@ -209,7 +209,6 @@ personal-site/
     └── apps/
         ├── CvWindow.tsx
         ├── ProjectsWindow.tsx
-        ├── AboutWindow.tsx
         └── ContactWindow.tsx
 ```
 
@@ -284,8 +283,11 @@ defensible; no project claims a deployment it does not have.
 ## 6. Presentation, responsiveness and accessibility
 
 The desktop is `#008080` teal, with icons in a left-hand column and the name plus
-one-paragraph summary set as large text on the background. The taskbar is pinned to the
-bottom with one button per open window — pressed-in when focused — and a clock.
+one-paragraph summary set as large text on the background, centred in the desktop area
+(bottom-centred below `md`, where centring it vertically would collide with the icon
+column). Windows cascade in from `x: 144` so they open clear of that column. The taskbar
+is pinned to the bottom with one button per open window — pressed-in when focused — and a
+clock.
 
 98.css supplies window frames, title bars, scrollbars, tabs and form controls. Tailwind
 handles layout. W95FA remains the body font, overriding 98.css's bundled `ms_sans_serif`.

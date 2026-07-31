@@ -2,7 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship a static Windows 95 desktop-style personal site with a CV window (plus PDF download), a Projects window, and About/Contact windows, backed by a hand-written window manager.
+**Goal:** Ship a static Windows 95 desktop-style personal site with a CV window (plus PDF download), a Projects window, and About/Contact windows, backed by a custom window manager.
+
+> **Amended after v1 shipped.** The task bodies below still describe the site as built at
+> the end of Task 10. Since then: the About window was removed (it only repeated the name
+> and summary already shown on the desktop), the CV window and icon were retitled "My CV",
+> windows now cascade in clear of the icon column, and the desktop name/summary block is
+> centred rather than pinned to a corner. `docs/DESIGN.md` and the code are the current
+> record; this plan is kept as the build history.
 
 **Architecture:** A single static React SPA with no backend, no router and no data fetching. A pure reducer in `src/windows/state.ts` owns all window behaviour; a React shell renders it; presentational "app" components read from typed content modules. Adding a window later is one registry entry plus one component.
 
@@ -297,7 +304,7 @@ my contact details.
 
 Built with Vite, React 19, TypeScript and Tailwind v4. Window chrome comes from
 [98.css](https://jdan.github.io/98.css/); the window manager — opening, focusing,
-stacking, minimising and dragging — is a hand-written reducer in `src/windows/state.ts`.
+stacking, minimising and dragging — is a custom reducer in `src/windows/state.ts`.
 
 ## Running it
 
@@ -548,7 +555,7 @@ export const projects: Project[] = [
     status: "local",
     stack: ["React", "TypeScript", "Vite", "Tailwind", "98.css"],
     blurb:
-      "A Windows 95 desktop in the browser: a hand-written window manager with draggable, " +
+      "A Windows 95 desktop in the browser: a custom window manager with draggable, " +
       "focusable, minimisable windows built on a pure reducer.",
     why:
       "To have somewhere to put my CV that is more memorable than a PDF, and because a " +
@@ -1068,7 +1075,7 @@ export default function AboutWindow() {
       <p>{profile.summary}</p>
       <p>
         This site is a Windows 95 desktop in the browser. The windows are draggable,
-        focusable and minimisable, all driven by a hand-written reducer — open a few at
+        focusable and minimisable, all driven by a custom reducer — open a few at
         once and stack them.
       </p>
     </div>
